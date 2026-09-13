@@ -102,7 +102,7 @@ function save(key, value) {
 }
 
 function settings() {
-  return load(S_SETTINGS, { key: '', flights: [], units: 'metric' });
+  return load(S_SETTINGS, { key: '', units: 'metric' });
 }
 
 // Der Zaehler laeuft je Kalendermonat, weil AviationStack so abrechnet.
@@ -467,28 +467,23 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var s = settings();
   if (dict.API_KEY !== undefined) s.key = String(dict.API_KEY.value || '').trim();
   if (dict.UNITS !== undefined) s.units = String(dict.UNITS.value || 'metric');
-  var f = [];
-  ['FLIGHT1', 'FLIGHT2', 'FLIGHT3'].forEach(function (k) {
-    if (dict[k] !== undefined) {
-      var v = String(dict[k].value || '').toUpperCase().replace(/\s+/g, '');
-      if (v) f.push(v);
-    }
-  });
-  s.flights = f;
+  // Die Flugnummer steht bewusst NICHT mehr hier: sie wird auf der Uhr
+  // eingegeben und mit jeder Anfrage mitgeschickt.
   save(S_SETTINGS, s);
   if (dict.QUOTA_RESET !== undefined && dict.QUOTA_RESET.value) {
     save(S_QUOTA, { month: monthKey(), used: 0 });
   }
-  console.log('Einstellungen gespeichert: ' + f.length + ' Flug/Fluege, Schlüssel ' +
+  console.log('Einstellungen gespeichert, Schluessel ' +
               (s.key ? 'gesetzt' : 'FEHLT'));
-  sendPage(f[0] || '', 0);
 });
 
 Pebble.addEventListener('appmessage', function (e) {
   var p = e.payload, s = settings();
   // Die Uhr sagt, in welcher Sprache sie beschriftet ist.
   if (p.LANG !== undefined) s_lang = (p.LANG === 1) ? 1 : 0;
-  var code = s.flights[0] || '';
+  // Die Flugnummer gehoert der UHR - sie wird dort eingegeben und mit jeder
+  // Anfrage mitgeschickt. Die Telefon-App verwaltet sie nicht mehr.
+  var code = (p.CODE !== undefined) ? String(p.CODE).toUpperCase() : '';
   if (p.REFRESH !== undefined) {
     if (!code) { sendPage('', 0); return; }
     refresh(code, function (err) {
@@ -512,8 +507,7 @@ Pebble.addEventListener('appmessage', function (e) {
 
 Pebble.addEventListener('ready', function () {
   var s = settings();
-  console.log('Flynformer bereit. Schlüssel ' + (s.key ? 'gesetzt' : 'fehlt') +
-              ', ' + s.flights.length + ' Flug/Fluege, Kontingent ' +
-              quota().used + '/' + QUOTA_LIMIT);
-  sendPage(s.flights[0] || '', 0);
+  console.log('Flynformer bereit. Schluessel ' + (s.key ? 'gesetzt' : 'fehlt') +
+              ', Kontingent ' + quota().used + '/' + QUOTA_LIMIT);
+  // Kein Senden hier: die Uhr fragt von sich aus und schickt die Flugnummer mit.
 });

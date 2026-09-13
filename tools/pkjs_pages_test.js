@@ -94,10 +94,15 @@ function fire(ev, arg) {
   (sandbox.__ev[ev] || []).forEach((fn) => fn(arg));
 }
 
-// Einstellungen setzen, wie sie die Konfigseite hinterlassen wuerde
+// Einstellungen setzen, wie sie die Konfigseite hinterlassen wuerde. Die
+// Flugnummer steht bewusst NICHT darin - die gibt die Uhr mit jeder Anfrage
+// mit, seit sie dort eingetippt wird.
 store['flynformer_settings'] = JSON.stringify({
-  key: 'TESTKEY', flights: ['LH400'], units: 'metric',
+  key: 'TESTKEY', units: 'metric',
 });
+
+// Was die Uhr mitschickt
+const CODE = process.env.FN_CODE || 'LH400';
 
 const PAGE_NAMES = ['Übersicht', 'Zeiten', 'Gate', 'Flugzeug', 'Strecke', 'Ziel'];
 let tooLong = 0;
@@ -120,12 +125,12 @@ function dump(label) {
 // Beide Sprachen: 1 = Deutsch, 0 = Englisch. Die Uhr schickt sie mit.
 const LANG = process.env.FN_LANG === 'en' ? 0 : 1;
 sent = [];
-fire('appmessage', { payload: { REFRESH: 1, REQUEST_PAGE: 0, LANG: LANG } });
+fire('appmessage', { payload: { REFRESH: 1, REQUEST_PAGE: 0, LANG: LANG, CODE: CODE } });
 
 setTimeout(function () {
-  for (let p = 0; p < 6; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG } });
+  for (let p = 0; p < 6; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
   setTimeout(function () {
-    dump('LH400, frisch geladen · ' + (LANG ? 'Deutsch' : 'Englisch'));
+    dump(CODE + ', frisch geladen · ' + (LANG ? 'Deutsch' : 'Englisch'));
     console.log('\n===== Netzabrufe =====');
     calls.forEach((u) => console.log('  ' + u));
     const paid = calls.filter((u) => u.indexOf('aviationstack') >= 0).length;

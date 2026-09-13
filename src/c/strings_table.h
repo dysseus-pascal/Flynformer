@@ -29,3 +29,8 @@ STR(STR_LOADING,       0,  "Loading…",        "Lade…")
 STR(STR_NO_PHONE,      0,  "Phone not reachable", "Telefon nicht erreichbar")
 STR(STR_STORED,        0,  "stored copy",     "gespeicherter Stand")
 STR(STR_NEVER,         0,  "never loaded",    "nie geladen")
+
+// ---- Flugnummer eingeben --------------------------------------------------
+STR(STR_ENTER_FLIGHT,  0, "Enter flight",  "Flug eingeben")
+STR(STR_INPUT_HINT,    0, "Up/Down change, Select next", "Hoch/Runter ändern, Mitte weiter")
+STR(STR_INPUT_CONFIRM, 0, "Select confirms", "Mitte bestätigt")

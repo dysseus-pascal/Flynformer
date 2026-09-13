@@ -27,6 +27,11 @@ void phone_init(FnPhoneUpdate on_update);
 void phone_deinit(void);
 
 // Seite anfordern. Zeigt sofort den gespeicherten Stand, falls vorhanden.
+// Die Flugnummer lebt auf der UHR, nicht in der Telefon-App: sie wird hier
+// eingegeben und ueberdauert im persist, bis sie geaendert wird.
+const char *phone_code(void);
+void phone_set_code(const char *code);
+
 void phone_request_page(int page);
 
 // Frische Daten holen - kostet eine Abfrage beim Anbieter.

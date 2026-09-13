@@ -1,9 +1,9 @@
 # Flynformer
 
-Flugverfolgung für Pebble (Emery, Flint, Gabbro). Flugnummer in der Telefon-App
-hinterlegen, und die Uhr zeigt Status, Zeiten, Gate, Terminal, Flugzeug,
-Strecke und das Wetter am Ziel — auf sechs Seiten, die man mit Hoch und Runter
-durchblättert.
+Flugverfolgung für Pebble (Emery, Flint, Gabbro). Flugnummer **auf der Uhr**
+eintippen, und sie zeigt Status, Zeiten, Gate, Terminal, Flugzeug, Strecke und
+das Wetter am Ziel — auf sechs Seiten, die man mit Hoch und Runter
+durchblättert. Ein Flugzeug fliegt heran, während die Daten kommen.
 
 Farbschema Amber auf Schwarz im Stil einer Abflugtafel, Gliederung wie ein
 Pebble-Timeline-Pin. Die Oberfläche folgt der **Sprache der Uhr** (Deutsch und
@@ -39,10 +39,19 @@ Zwei Folgen für die Bedienung:
 
 ## Einrichten
 
-1. In der Pebble-App auf dem Telefon: **Flynformer → Einstellungen**.
-2. Eigenen aviationstack-Schlüssel eintragen (kostenloses Konto genügt).
-3. Bis zu drei Flugnummern hinterlegen, wie auf dem Ticket: `LH400`, `LX100`.
-4. Einheiten wählen, metrisch oder imperial.
+**Einmal am Telefon**, in der Pebble-App unter *Flynformer → Einstellungen*:
+eigenen aviationstack-Schlüssel eintragen (kostenloses Konto genügt) und
+Einheiten wählen. Der Schlüssel gehört dorthin, weil 32 Zeichen auf der Uhr
+einzutippen eine Strafe wäre.
+
+**Alles Weitere auf der Uhr.** Beim ersten Start fragt sie nach der Flugnummer:
+zwei Buchstaben, bis zu vier Ziffern. Hoch und Runter ändern die gewählte
+Stelle, Mitte rückt weiter, auf der letzten Stelle bestätigt Mitte. Zurück geht
+eine Stelle zurück statt gleich die halbe Eingabe zu verwerfen.
+
+Es ist immer **genau ein Flug** aktiv, und er bleibt gespeichert, bis du ihn
+änderst — ein langer Druck auf die Mitteltaste öffnet die Eingabe wieder, mit
+der bisherigen Nummer vorbelegt.
 
 Der **Schlüssel bleibt auf dem Telefon**. Er wird im localStorage der
 Telefon-App abgelegt, nie an die Uhr geschickt und steht nicht im Quelltext —
@@ -54,11 +63,14 @@ sonst läge er in diesem öffentlichen Repository für jeden lesbar.
 |---|---|
 | Oben / Unten | Seite wechseln |
 | Mitte | aktualisieren — **kostet eine Abfrage** |
+| Mitte lang | Flugnummer ändern |
 | Zurück | beenden |
 
-Beim Start fliegt einmal ein Flugzeug aus der Tiefe nach vorn und oben aus dem
-Bild, dann steht die Seite da. Beim Aktualisieren läuft die Animation
-bewusst nicht — dreimal am Tag ist sie Freude, bei jedem Tastendruck Ballast.
+**Der Anflug ist die Ladeanzeige.** Immer wenn Daten geholt werden — beim Start,
+nach einer Eingabe, beim Aktualisieren — fliegt das Flugzeug aus der Tiefe nach
+vorn und oben aus dem Bild und gibt die Seite frei. Kommen die Daten früher an,
+fliegt es trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der
+Fusszeile.
 
 ## Das Flugzeug
 

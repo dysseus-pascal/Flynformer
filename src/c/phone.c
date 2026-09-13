@@ -1,7 +1,6 @@
 #include <pebble.h>
 #include "phone.h"
 #include "strings.h"
-#include "strings.h"
 
 // Ein persist-Schluessel je Seite. Fuenf Zeilen sind 140 Byte und bleiben damit
 // unter PERSIST_DATA_MAX_LENGTH (256) - ein Schluessel, ein Satz, kein
@@ -10,13 +9,53 @@
 #define PERSIST_VERSION     1
 #define PERSIST_PAGE_BASE   110   // 110..115
 #define PERSIST_FNO_KEY     120
+#define PERSIST_CODE_KEY    121
 
 typedef struct { char line[5][FN_LINE_LEN]; } StoredPage;
 
 static FnPage s_page;
 static FnPhoneUpdate s_on_update;
+static char s_code[12];
+
+// Der Postausgang fasst genau EINE Nachricht. Zwei Anfragen kurz nacheinander -
+// beim Start der gespeicherte Stand und gleich darauf die Auffrischung, oder
+// schnelles Blaettern - und die zweite faellt lautlos unter den Tisch:
+// app_message_outbox_begin meldet dann BUSY. Genau die Auffrischung ging so
+// verloren, und in der Fusszeile blieb "Lade..." stehen, bis man erneut drueckte.
+//
+// Deshalb wird der Wunsch gemerkt statt weggeworfen und kurz darauf erneut
+// versucht. Gemerkt wird nur der LETZTE Seitenwunsch - wer durch sechs Seiten
+// blaettert, will die sechste sehen, nicht die vier dazwischen. Eine gewuenschte
+// Auffrischung haftet dagegen, bis sie tatsaechlich hinausgegangen ist.
+static bool s_want;
+static int  s_want_page;
+static bool s_want_refresh;
+static bool s_sent_refresh;   // was in der Nachricht stand, die gerade unterwegs ist
+static int  s_sent_page;
+static AppTimer *s_retry;
+static uint8_t s_tries;
+
+// Ohne Grenze liefe der Wiederholer ewig, wenn das Telefon gar nicht da ist -
+// achtmal in der Sekunde, bis der Akku leer ist. Nach knapp drei Sekunden ist
+// klar, dass es nicht am Postausgang liegt, und die Uhr sagt es.
+#define RETRY_MS   120
+#define RETRY_MAX  24
 
 const FnPage *phone_page(void) { return &s_page; }
+
+const char *phone_code(void) { return s_code; }
+
+void phone_set_code(const char *code) {
+  if (!code) return;
+  strncpy(s_code, code, sizeof(s_code) - 1);
+  s_code[sizeof(s_code) - 1] = 0;
+  persist_write_string(PERSIST_CODE_KEY, s_code);
+  // Neue Nummer, alter Stand ist wertlos - sonst zeigte die App die Daten des
+  // vorigen Fluges unter der neuen Nummer.
+  for (int i = 0; i < FN_PAGE_COUNT; i++) persist_delete(PERSIST_PAGE_BASE + i);
+  memset(&s_page, 0, sizeof(s_page));
+  strncpy(s_page.fno, s_code, sizeof(s_page.fno) - 1);
+}
 
 static void prv_copy(char *dst, size_t size, const Tuple *t) {
   if (!t) return;
@@ -92,16 +131,73 @@ static void prv_dropped(AppMessageResult reason, void *context) {
   APP_LOG(APP_LOG_LEVEL_ERROR, "AppMessage verworfen: %d", (int)reason);
 }
 
-static void prv_send(int page, bool refresh) {
+static void prv_try_send(void *data);
+static void prv_retry_soon(void);
+
+// Was nicht hinausging, wird wieder zum Wunsch. Ein inzwischen eingetroffener
+// neuerer Seitenwunsch hat Vorrang; eine verlorene Auffrischung haftet dennoch.
+static void prv_restore_wish(void) {
+  if (!s_want) { s_want = true; s_want_page = s_sent_page; }
+  if (s_sent_refresh) s_want_refresh = true;
+  s_sent_refresh = false;
+  prv_retry_soon();
+}
+
+static void prv_give_up(void) {
+  s_want = false;
+  s_want_refresh = false;
+  strncpy(s_page.status, S(STR_NO_PHONE), sizeof(s_page.status) - 1);
+  s_page.status[sizeof(s_page.status) - 1] = 0;
+  if (s_on_update) s_on_update();
+}
+
+static void prv_retry_soon(void) {
+  if (s_retry) return;
+  if (++s_tries > RETRY_MAX) { prv_give_up(); return; }
+  s_retry = app_timer_register(RETRY_MS, prv_try_send, NULL);
+}
+
+static void prv_try_send(void *data) {
+  s_retry = NULL;
+  if (!s_want) return;
   DictionaryIterator *out;
-  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
-  dict_write_int32(out, MESSAGE_KEY_REQUEST_PAGE, page);
+  if (app_message_outbox_begin(&out) != APP_MSG_OK) { prv_retry_soon(); return; }
+  dict_write_int32(out, MESSAGE_KEY_REQUEST_PAGE, s_want_page);
   // Die Telefonseite baut ALLE Anzeigetexte und kann die Uhrsprache nicht von
   // sich aus erfahren (0 = Englisch, 1 = Deutsch).
   dict_write_int32(out, MESSAGE_KEY_LANG, (int32_t)strings_language());
-  if (refresh) dict_write_int32(out, MESSAGE_KEY_REFRESH, 1);
+  if (s_code[0]) dict_write_cstring(out, MESSAGE_KEY_CODE, s_code);
+  if (s_want_refresh) dict_write_int32(out, MESSAGE_KEY_REFRESH, 1);
   dict_write_end(out);
-  app_message_outbox_send();
+  // Der Wunsch gilt als abgegeben, sobald er den Postausgang erreicht hat, und
+  // wird dabei beiseitegelegt. Was danach hereinkommt, ist ein NEUER Wunsch -
+  // wuerde stattdessen die Quittung "den Wunsch" loeschen, loeschte die Quittung
+  // der ersten Nachricht die zweite, die noch gar nicht raus ist. Genau daran
+  // blieb die Auffrischung beim Start haengen.
+  s_sent_page = s_want_page;
+  s_sent_refresh = s_want_refresh;
+  s_want = false;
+  s_want_refresh = false;
+  if (app_message_outbox_send() != APP_MSG_OK) prv_restore_wish();
+}
+
+// Quittung: nichts zu tun. Kam zwischenzeitlich ein neuer Wunsch, wartet er
+// schon mit seinem Zeitgeber.
+static void prv_sent(DictionaryIterator *it, void *context) {
+  if (s_want) prv_retry_soon();
+}
+
+static void prv_send_failed(DictionaryIterator *it, AppMessageResult reason, void *context) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Senden fehlgeschlagen: %d", (int)reason);
+  prv_restore_wish();
+}
+
+static void prv_send(int page, bool refresh) {
+  s_want = true;
+  s_want_page = page;
+  if (refresh) s_want_refresh = true;
+  s_tries = 0;          // ein neuer Wunsch hat wieder alle Versuche frei
+  prv_try_send(NULL);
 }
 
 void phone_request_page(int page) {
@@ -127,9 +223,21 @@ void phone_refresh(int page) {
 
 void phone_init(FnPhoneUpdate on_update) {
   memset(&s_page, 0, sizeof(s_page));
+  s_code[0] = 0;
+  if (persist_exists(PERSIST_CODE_KEY)) {
+    persist_read_string(PERSIST_CODE_KEY, s_code, sizeof(s_code));
+    s_code[sizeof(s_code) - 1] = 0;
+    strncpy(s_page.fno, s_code, sizeof(s_page.fno) - 1);
+  }
   s_on_update = on_update;
+  s_want = false;
+  s_want_refresh = false;
+  s_sent_refresh = false;
+  s_tries = 0;
   app_message_register_inbox_received(prv_inbox);
   app_message_register_inbox_dropped(prv_dropped);
+  app_message_register_outbox_sent(prv_sent);
+  app_message_register_outbox_failed(prv_send_failed);
   // Kleine Puffer mit Absicht: die Puffer kommen aus dem App-Heap, und auf
   // flint waere ein 8-KB-Posteingang ein Achtel des gesamten Budgets. Fuenf
   // Zeilen zu 28 Byte plus Kleinkram passen bequem in 512.
@@ -137,6 +245,8 @@ void phone_init(FnPhoneUpdate on_update) {
 }
 
 void phone_deinit(void) {
+  if (s_retry) { app_timer_cancel(s_retry); s_retry = NULL; }
+  s_want = false;
   app_message_deregister_callbacks();
   s_on_update = NULL;
 }

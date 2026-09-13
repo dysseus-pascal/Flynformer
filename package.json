@@ -1,7 +1,7 @@
 {
   "name": "flynformer",
   "author": "dysseus-pascal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "keywords": [
     "pebble-app"
   ],
@@ -39,11 +39,9 @@
       "AGE",
       "QUOTA",
       "FNO",
+      "CODE",
       "LANG",
       "API_KEY",
-      "FLIGHT1",
-      "FLIGHT2",
-      "FLIGHT3",
       "UNITS",
       "QUOTA_RESET"
     ],

@@ -33,29 +33,14 @@ module.exports = [
   {
     type: 'section',
     items: [
-      { type: 'heading', defaultValue: 'Flüge' },
+      { type: 'heading', defaultValue: 'Flug' },
       {
         type: 'text',
         defaultValue:
-          'Flugnummer wie auf dem Ticket, ohne Leerzeichen: LX100, EK88, LH1234.'
-      },
-      {
-        type: 'input',
-        messageKey: 'FLIGHT1',
-        label: 'Flug 1',
-        attributes: { placeholder: 'z. B. LX100', limit: 8 }
-      },
-      {
-        type: 'input',
-        messageKey: 'FLIGHT2',
-        label: 'Flug 2',
-        attributes: { placeholder: 'optional', limit: 8 }
-      },
-      {
-        type: 'input',
-        messageKey: 'FLIGHT3',
-        label: 'Flug 3',
-        attributes: { placeholder: 'optional', limit: 8 }
+          'Die Flugnummer gibst du auf der UHR ein, nicht hier. Beim ersten ' +
+          'Start fragt sie danach; später ändert ein langer Druck auf die ' +
+          'Mitteltaste den Flug. Es ist immer genau ein Flug aktiv, und er ' +
+          'bleibt gespeichert, bis du ihn änderst.'
       }
     ]
   },
