@@ -6,9 +6,13 @@
 #include "plane_fx.h"
 #include "strings.h"
 
-// Die sechs Seiten im Timeline-Look: Kopfband in Amber mit Flugnummer und
-// Seitenname, schwarze 2-px-Linie, Karte mit fuenf Zeilen, Seitenleiste rechts
-// mit sechs Marken. Fusszeile traegt Alter und Kontingent.
+// Fuenf Seiten im Timeline-Look: Kopfband in Amber mit Flugnummer und
+// Ueberschrift, schwarze 2-px-Linie, Karte mit Zeilen, Seitenleiste rechts mit
+// einer Marke je Seite. Fusszeile traegt Alter und Kontingent.
+//
+// Seite 0 ist der STATUSSCHIRM und richtet sich nach der Flugphase: vor dem
+// Abflug zaehlt das Gate, unterwegs zaehlen Fortschritt und Restzeit, nach der
+// Landung das Gepaeckband. Was gerade nicht zaehlt, steht auch nicht da.
 //
 // DER ANFLUG IST DIE LADEANZEIGE. Er laeuft, solange Daten geholt werden - beim
 // Start mit gesetztem Flug, nach einer Eingabe und bei jedem Aktualisieren.
@@ -28,14 +32,57 @@ static AppTimer *s_open_input;
 
 static void prv_start_input(void);
 
-static StringId prv_page_name(int page) {
+// Seite 0 traegt keinen festen Namen mehr, sondern die Phase des Fluges. Wer am
+// Gate auf die Uhr sieht, will "Boarding" lesen, nicht "Uebersicht".
+static StringId prv_phase_name(int phase) {
+  switch (phase) {
+    case FN_PHASE_PLANNED:  return STR_PH_PLANNED;
+    case FN_PHASE_BOARDING: return STR_PH_BOARDING;
+    case FN_PHASE_DEPARTED: return STR_PH_DEPARTED;
+    case FN_PHASE_ENROUTE:  return STR_PH_ENROUTE;
+    case FN_PHASE_APPROACH: return STR_PH_APPROACH;
+    case FN_PHASE_ARRIVED:  return STR_PH_ARRIVED;
+    default:                return STR_PH_OFF;
+  }
+}
+
+static StringId prv_page_name(int page, int phase) {
   switch (page) {
-    case 0: return STR_PAGE_OVERVIEW;
+    case 0: return prv_phase_name(phase);
     case 1: return STR_PAGE_TIMES;
     case 2: return STR_PAGE_GATE;
-    case 3: return STR_PAGE_AIRCRAFT;
-    case 4: return STR_PAGE_ROUTE;
+    case 3: return STR_PAGE_ROUTE;
     default: return STR_PAGE_DEST;
+  }
+}
+
+// Fortschritt als Kette gleicher Kaestchen statt als glatter Balken: auf einem
+// kleinen Schwarz-Weiss-Schirm liest sich "sieben von zwoelf" auf einen Blick,
+// eine Fuellkante dagegen muss man schaetzen.
+#define BAR_SEGS 12
+#define BAR_GAP  2
+#define BAR_H    PBL_IF_ROUND_ELSE(12, (PBL_DISPLAY_WIDTH >= 180 ? 12 : 9))
+
+static void prv_bar(GContext *ctx, GRect box, int percent) {
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  const int16_t seg_w = (box.size.w - (BAR_SEGS - 1) * BAR_GAP) / BAR_SEGS;
+  if (seg_w < 2) return;
+  // Aufrunden, damit schon das erste Prozent ein Kaestchen faerbt und die
+  // letzten Prozente nicht als "fertig" gelesen werden, bevor es soweit ist.
+  int filled = (percent * BAR_SEGS + 99) / 100;
+  if (percent > 0 && filled == 0) filled = 1;
+  if (filled > BAR_SEGS) filled = BAR_SEGS;
+  for (int i = 0; i < BAR_SEGS; i++) {
+    const GRect r = GRect(box.origin.x + i * (seg_w + BAR_GAP), box.origin.y,
+                          seg_w, box.size.h);
+    if (i < filled) {
+      graphics_context_set_fill_color(ctx, FN_COLOR_ACCENT);
+      graphics_fill_rect(ctx, r, 0, GCornerNone);
+    } else {
+      graphics_context_set_stroke_color(ctx, FN_COLOR_DIM);
+      graphics_draw_rect(ctx, r);
+    }
   }
 }
 
@@ -84,7 +131,7 @@ static void prv_update(Layer *layer, GContext *ctx) {
   graphics_context_set_text_color(ctx, FN_COLOR_ON_ACCENT);
   prv_text(ctx, p->fno[0] ? p->fno : S(STR_NO_FLIGHT), F_FNO,
            GRect(m, 2, b.size.w - m - 4, band / 2 + 6), al);
-  prv_text(ctx, S(prv_page_name(s_page)), F_SUB,
+  prv_text(ctx, S(prv_page_name(s_page, p->phase)), F_SUB,
            GRect(m, band / 2 + 2, b.size.w - m - 4, band / 2), al);
 
   graphics_context_set_fill_color(ctx, FN_COLOR_BG);
@@ -103,8 +150,20 @@ static void prv_update(Layer *layer, GContext *ctx) {
 
   int16_t y = band + 6;
   graphics_context_set_text_color(ctx, FN_COLOR_TEXT);
+  // Der Balken gehoert nur zur Statusseite und nur, solange der Flug wirklich
+  // unterwegs ist. Am Gate ist ein Fortschritt von 0 % keine Auskunft, sondern
+  // eine Irrefuehrung.
+  const bool show_bar = (s_page == 0 && p->phase == FN_PHASE_ENROUTE);
   for (int i = 0; i < 5; i++) {
-    if (!p->line[i][0]) { y += LINE_H; continue; }
+    if (show_bar && i == 2) {
+      prv_bar(ctx, GRect(m, y + 3, cw - m - 4, BAR_H), p->progress);
+      y += BAR_H + 10;
+    }
+    // Leere Zeilen kosten keinen Platz mehr. Vorher hielten sie ihre Hoehe frei,
+    // damit die Zeilen ueber alle Seiten an derselben Stelle stehen - auf einer
+    // Seite, die je nach Flugphase anders aussieht, ist das gegenstandslos, und
+    // die Luecken liessen den Schirm leerer wirken, als er ist.
+    if (!p->line[i][0]) continue;
     const bool big = (s_page == 0 && i == 1);
     if (big) graphics_context_set_text_color(ctx, FN_COLOR_ACCENT);
     prv_text(ctx, p->line[i], big ? FONT_KEY_GOTHIC_28_BOLD : F_LINE,
@@ -206,10 +265,12 @@ static void prv_load(Window *window) {
 
   phone_init(prv_on_update);
   s_page = 0;
-  if (phone_code()[0]) {
-    phone_request_page(0);   // gespeicherter Stand sofort
-    prv_fetch();             // und gleich frische Daten holen
-  }
+  // NUR der gespeicherte Stand, und der kostet nichts. Hier stand einmal ein
+  // prv_fetch(), und damit war jeder App-Start ein bezahlter Abruf: wer viermal
+  // am Tag aufs Gate schaut, verbrauchte 120 Abrufe im Monat gegen ein
+  // Kontingent von 100 - ohne je die Mitteltaste gedrueckt zu haben.
+  // Aktualisiert wird auf Wunsch, nicht beim Hinsehen.
+  if (phone_code()[0]) phone_request_page(0);
 }
 
 static void prv_unload(Window *window) {

@@ -15,12 +15,21 @@
 // selbst kennt.
 
 // ---- Seitennamen im Kopfband ----------------------------------------------
-STR(STR_PAGE_OVERVIEW, 0,  "Overview",  "Übersicht")
 STR(STR_PAGE_TIMES,    0,  "Times",     "Zeiten")
 STR(STR_PAGE_GATE,     0,  "Gate",      "Gate")
-STR(STR_PAGE_AIRCRAFT, 0,  "Aircraft",  "Flugzeug")
 STR(STR_PAGE_ROUTE,    0,  "Route",     "Strecke")
 STR(STR_PAGE_DEST,     0,  "Arrival",   "Ziel")
+
+// Die Ueberschrift der Statusseite ist die Phase, in der der Flug gerade steckt.
+// Sie ersetzt das fruehere feste "Uebersicht": wer aufs Gate schaut, will dort
+// lesen, was gerade passiert, nicht wie die Seite heisst.
+STR(STR_PH_PLANNED,    0,  "Scheduled",   "Geplant")
+STR(STR_PH_BOARDING,   0,  "Boarding",    "Boarding")
+STR(STR_PH_DEPARTED,   0,  "Departed",    "Gestartet")
+STR(STR_PH_ENROUTE,    0,  "In flight",   "Im Flug")
+STR(STR_PH_APPROACH,   0,  "Approaching", "Landeanflug")
+STR(STR_PH_ARRIVED,    0,  "Arrived",     "Angekommen")
+STR(STR_PH_OFF,        0,  "Status",      "Status")
 
 // ---- Zustaende ------------------------------------------------------------
 STR(STR_NO_FLIGHT,     0,  "No flight set",   "Kein Flug gesetzt")

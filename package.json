@@ -1,7 +1,7 @@
 {
   "name": "flynformer",
   "author": "dysseus-pascal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "keywords": [
     "pebble-app"
   ],
@@ -30,6 +30,8 @@
       "REQUEST_PAGE",
       "REFRESH",
       "PAGE",
+      "PHASE",
+      "PROGRESS",
       "L1",
       "L2",
       "L3",

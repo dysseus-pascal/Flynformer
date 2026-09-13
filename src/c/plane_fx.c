@@ -77,21 +77,31 @@ bool plane_fx_is_playing(void) {
 }
 
 // Fortschritt in Groesse und Hoehe umsetzen. Beide Kurven sind bewusst nicht
-// linear: die Groesse waechst quadratisch (Naeherung an eine Perspektive), der
-// Weg nach oben erst spaet.
+// linear: Groesse und Weg nach oben wachsen beide quadratisch (Naeherung an
+// eine Perspektive), damit der Anflug EINE Bewegung bleibt.
 void plane_fx_draw_frame(GContext *ctx, GRect bounds) {
   if (!s_anim) return;
   const int32_t p = s_progress;                    // 0 .. 65536
   const int32_t pmax = ANIMATION_NORMALIZED_MAX;
 
-  // Groesse: von 4 % auf 380 % der Bildbreite, quadratisch
+  // Wachsen und Steigen liegen auf DERSELBEN Kurve. Frueher wuchs die Groesse
+  // quadratisch, die Hoehe aber kubisch, also deutlich spaeter: das Flugzeug
+  // wurde erst riesig und wurde dann nach oben gerissen - dabei fuhr seine
+  // Unterkante ein zweites Mal durchs ganze Bild, und es sah aus, als flöge
+  // gleich noch ein Flugzeug hinterher. Auf einer gemeinsamen Kurve wandert die
+  // Unterkante gleichmaessig nach oben und verlaesst den Schirm genau einmal.
   const int32_t base = bounds.size.w;
-  const int32_t sq = (p * p) / pmax;               // 0 .. pmax, quadratisch
-  int16_t size = (int16_t)(base * (4 + (376 * sq) / pmax) / 100);
+  const int32_t u = (p * p) / pmax;                // 0 .. pmax, quadratisch
 
-  // Hoehe: startet knapp unter der Mitte, faehrt spaet nach oben hinaus
-  const int32_t cube = (sq * p) / pmax;            // noch spaeter einsetzend
-  int16_t cy = (int16_t)(bounds.size.h * 58 / 100 - (bounds.size.h * 4 * cube) / pmax);
+  // Groesse: von 4 % auf 304 % der Bildbreite
+  int16_t size = (int16_t)(base * (4 + (300 * u) / pmax) / 100);
+
+  // Hoehe: von knapp unter der Mitte um 125 % der Bildhoehe nach oben. Der
+  // Faktor ist so gewaehlt, dass die Unterkante des gewachsenen Flugzeugs am
+  // Ende knapp ueber dem oberen Rand steht - nicht frueher, sonst steht der
+  // Schirm leer, und nicht spaeter, sonst haengt das Flugzeug noch im Bild.
+  const int32_t rise = (int32_t)bounds.size.h * 125 / 100;
+  int16_t cy = (int16_t)(bounds.size.h * 58 / 100 - (rise * u) / pmax);
 
   plane_fx_draw(ctx, GPoint(bounds.size.w / 2, cy), size);
 }

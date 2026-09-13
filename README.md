@@ -1,9 +1,10 @@
 # Flynformer
 
 Flugverfolgung für Pebble (Emery, Flint, Gabbro). Flugnummer **auf der Uhr**
-eintippen, und sie zeigt Status, Zeiten, Gate, Terminal, Flugzeug, Strecke und
-das Wetter am Ziel — auf sechs Seiten, die man mit Hoch und Runter
-durchblättert. Ein Flugzeug fliegt heran, während die Daten kommen.
+eintippen, ein Flugzeug fliegt heran, während die Daten kommen — und dann steht
+da, **was gerade zählt**: am Gate die Gate-Nummer, unterwegs der Fortschritt,
+nach der Landung das Gepäckband. Wer mehr will, blättert mit Hoch und Runter
+durch vier weitere Seiten.
 
 Farbschema Amber auf Schwarz im Stil einer Abflugtafel, Gliederung wie ein
 Pebble-Timeline-Pin. Die Oberfläche folgt der **Sprache der Uhr** (Deutsch und
@@ -17,17 +18,14 @@ gut drei pro Tag. Deshalb ist die App darauf gebaut, damit hauszuhalten:
 
 | Seite | Inhalt | Quelle | Kosten |
 |---|---|---|---|
-| 1 Übersicht | Status, Route, Countdown | aviationstack | **1 Abfrage** |
+| 1 Status | was in dieser Flugphase zählt | aviationstack | **1 Abfrage** |
 | 2 Zeiten | Plan- und Neuzeiten, Verspätung | dieselbe Antwort | 0 |
 | 3 Gate | Terminal, Gate, Gepäckband | dieselbe Antwort | 0 |
-| 4 Flugzeug | Kennzeichen, Muster, Halter | [hexdb.io](https://hexdb.io) | 0 |
-| 5 Strecke | Distanz, Flugzeit, GPS-Abstand | [adsbdb](https://api.adsbdb.com) | 0 |
-| 6 Ziel | Wetter und Ortszeit | [Open-Meteo](https://open-meteo.com) | 0 |
+| 4 Strecke | Distanz, Flugzeit, GPS-Abstand | [adsbdb](https://api.adsbdb.com) | 0 |
+| 5 Ziel | Wetter und Ortszeit | [Open-Meteo](https://open-meteo.com) | 0 |
 
-Der Trick liegt in Seite 4: aviationstack liefert das Kennzeichen zwar nicht,
-wohl aber den **Mode-S-Hex** des Flugzeugs — und damit beantworten hexdb und
-adsbdb den Rest kostenlos. Gemessen an 20 Zürcher Abflügen ist
-`aircraft.registration` zu 0 % gefüllt, `aircraft.icao24` dagegen zu 100 %.
+Eine einzige bezahlte Antwort trägt die ersten drei Seiten; Strecke, Wetter und
+die beiden Zeitzonen kommen aus kostenlosen Quellen.
 
 Zwei Folgen für die Bedienung:
 
@@ -37,6 +35,31 @@ Zwei Folgen für die Bedienung:
 - **Ein Zähler.** Die Fusszeile zeigt immer, wie viele Abfragen dieser Monat
   gekostet hat. Bei 100 im Monat gehört das ins Bild.
 
+## Der Statusschirm
+
+Die erste Seite hat keinen festen Inhalt. Sie zeigt, was in der Phase zählt, in
+der der Flug gerade steckt — und sonst nichts. Die Phase rechnet die Telefonseite
+aus den Zeiten aus, weil nur sie die echten Zeitzonen beider Flughäfen kennt.
+
+| Phase | Wann | Was gross dasteht | Was noch |
+|---|---|---|---|
+| Geplant | mehr als 50 min vor dem Abflug | Countdown | Abflugzeit, Gate falls bekannt |
+| Boarding | ab 50 min vor dem Abflug | **Gate** | Terminal, Abflug, Countdown |
+| Gestartet | erste 20 min in der Luft | Ankunftszeit | Abflug, Verspätung |
+| Im Flug | dazwischen | Restzeit | **Fortschrittsbalken**, Ankunft |
+| Landeanflug | letzte 30 min | Countdown | Ankunfts-Gate, Gepäckband |
+| Angekommen | gelandet | Landezeit | Gate, Gepäckband |
+
+Der Fortschritt ist eine Kette aus zwölf Kästchen, keine glatte Füllkante: auf
+einem kleinen Schirm liest sich «sieben von zwölf» auf einen Blick, eine Kante
+muss man schätzen. Er erscheint **nur im Reiseflug** — am Gate wäre ein Balken
+bei 0 % keine Auskunft, sondern eine Irreführung.
+
+Höchstens vier Angaben je Phase, mit Balken drei. Das ist keine Vorliebe,
+sondern das, was auf `flint` zwischen Kopfband und Fusszeile passt; eine fünfte
+Zeile lief in die Fusszeile hinein. Verspätung hängt darum als `+13` an der
+Zeit, statt eine eigene Zeile zu belegen.
+
 ## Einrichten
 
 **Einmal am Telefon**, in der Pebble-App unter *Flynformer → Einstellungen*:
@@ -45,9 +68,12 @@ Einheiten wählen. Der Schlüssel gehört dorthin, weil 32 Zeichen auf der Uhr
 einzutippen eine Strafe wäre.
 
 **Alles Weitere auf der Uhr.** Beim ersten Start fragt sie nach der Flugnummer:
-zwei Buchstaben, bis zu vier Ziffern. Hoch und Runter ändern die gewählte
+zweistelliges Kürzel, bis zu vier Ziffern. Hoch und Runter ändern die gewählte
 Stelle, Mitte rückt weiter, auf der letzten Stelle bestätigt Mitte. Zurück geht
 eine Stelle zurück statt gleich die halbe Eingabe zu verwerfen.
+
+Das Kürzel darf eine Ziffer enthalten — `U2` ist easyJet, `W6` Wizz Air. Die
+beiden ersten Stellen laufen deshalb durch A–Z **und** 0–9.
 
 Es ist immer **genau ein Flug** aktiv, und er bleibt gespeichert, bis du ihn
 änderst — ein langer Druck auf die Mitteltaste öffnet die Eingabe wieder, mit
@@ -66,11 +92,20 @@ sonst läge er in diesem öffentlichen Repository für jeden lesbar.
 | Mitte lang | Flugnummer ändern |
 | Zurück | beenden |
 
-**Der Anflug ist die Ladeanzeige.** Immer wenn Daten geholt werden — beim Start,
-nach einer Eingabe, beim Aktualisieren — fliegt das Flugzeug aus der Tiefe nach
-vorn und oben aus dem Bild und gibt die Seite frei. Kommen die Daten früher an,
-fliegt es trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der
-Fusszeile.
+**Der Anflug ist die Ladeanzeige.** Er läuft, wenn Daten geholt werden — nach
+einer Eingabe und beim Aktualisieren: das Flugzeug fliegt aus der Tiefe nach vorn
+und oben aus dem Bild und gibt die Seite frei. Kommen die Daten früher an, fliegt
+es trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
+
+Wachsen und Steigen liegen dabei auf **derselben** Kurve. Vorher wuchs die Grösse
+quadratisch, die Höhe aber kubisch, also deutlich später: das Flugzeug wurde erst
+riesig und wurde dann nach oben gerissen, wobei seine Unterkante ein zweites Mal
+durchs Bild fuhr — es sah aus, als flöge gleich noch eines hinterher.
+
+**Beim Öffnen fliegt nichts und kostet nichts.** Da steht sofort der gespeicherte
+Stand mit seinem Alter. Das ist Absicht: ein Anflug beim Start hiesse, dass
+geholt wird, und Holen kostet eine der 100 Abfragen — viermal am Tag hinsehen
+wäre das Kontingent in 25 Tagen.
 
 ## Das Flugzeug
 
@@ -93,9 +128,10 @@ Ehrlicher als es zu verschweigen:
 - **Keine Aktualisierung im Hintergrund.** PebbleKit JS läuft nur, solange die
   App auf der Uhr läuft, und wird beim Beenden gestoppt. Ohne eigenen Server
   gibt es kein stilles Nachladen.
-- **Keine Sitzzahl.** aviationstack liefert sie nicht, und die freien
-  Flugzeugdatensätze haben sie für 2,5 % der Muster — und dann als *zertifizierte
-  Maximalkapazität*, nicht als Bestuhlung der Airline.
+- **Nichts zum Flugzeug selbst.** Kennzeichen, Muster und Halter waren einmal
+  eine eigene Seite. Sie ist entfallen: am Gate will niemand wissen, welcher
+  Airbus da steht, und der Umweg über den Mode-S-Hex kostete Zeit vor der ersten
+  Anzeige.
 - **Keine Verspätungsvorhersage.** Frei verfügbar gibt es nur den aktuellen
   US-Zustand (FAA), nichts für Europa und keine Prognose.
 - **Ankunfts-Gate und Gepäckband fehlen oft.** Bei 20 gemessenen Zürcher
@@ -124,10 +160,24 @@ Koordinaten, 780 Byte, kostenlos.
 ## Werkzeuge
 
 ```bash
+node tools/pkjs_phase_test.js          # der Statusschirm in allen Flugphasen
+node tools/pkjs_quota_test.js          # was kostet was
 node tools/pkjs_pages_test.js          # alle sechs Seiten, deutsch
 FN_LANG=en node tools/pkjs_pages_test.js   # dasselbe auf englisch
 node tools/strings_check.js            # prüft src/c/strings_table.h
 ```
+
+`pkjs_phase_test.js` stellt die Uhr statt den Flug: dieselbe aufgezeichnete
+Antwort wird sechsmal ausgewertet — vier Stunden vor dem Abflug, am Gate, kurz
+nach dem Start, auf halber Strecke, im Anflug und nach der Landung. Geprüft wird,
+dass die Phase stimmt, der Fortschritt nur unterwegs von Null verschieden ist und
+keine Zeile zu lang wird.
+
+`pkjs_quota_test.js` bewacht das Monatskontingent. Es hält fest, dass ein
+App-Start nichts kostet, die Mitteltaste genau eine Abfrage, Blättern wieder
+nichts, und dass der Rücksetz-Schalter den Zähler nur beim Umlegen nullt. Drei
+Fehler, die genau dort sassen, haben es veranlasst — und dass es sie wirklich
+fängt, wurde geprüft, indem die Korrekturen versuchsweise zurückgebaut wurden.
 
 `pkjs_pages_test.js` lädt die Telefonseite in einen Sandkasten mit gestubbtem
 Pebble, localStorage und XMLHttpRequest, beantwortet jede Netzanfrage aus
@@ -170,5 +220,4 @@ Eigenentwicklung. Anlass war eine kostenpflichtige App im Pebble-Appstore;
 kein Code, keine Gestaltung, kein Name. Der Entwurf, das Flugzeug und die
 Auswahl der Datenquellen sind eigen.
 
-Datenquellen: aviationstack (Flugstatus, eigener Schlüssel nötig), hexdb.io und
-adsbdb (Flugzeug und Route, kostenlos), Open-Meteo (Wetter, CC BY 4.0).
+Datenquellen: aviationstack (Flugstatus, eigener Schlüssel nötig), adsbdb (Strecke und Koordinaten, kostenlos), Open-Meteo (Wetter, CC BY 4.0).

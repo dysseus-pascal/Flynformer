@@ -104,7 +104,8 @@ store['flynformer_settings'] = JSON.stringify({
 // Was die Uhr mitschickt
 const CODE = process.env.FN_CODE || 'LH400';
 
-const PAGE_NAMES = ['Übersicht', 'Zeiten', 'Gate', 'Flugzeug', 'Strecke', 'Ziel'];
+const PAGE_NAMES = ['Status', 'Zeiten', 'Gate', 'Strecke', 'Ziel'];
+const PHASE_NAMES = ['Geplant', 'Boarding', 'Gestartet', 'Im Flug', 'Landeanflug', 'Angekommen', 'Status'];
 let tooLong = 0;
 
 function dump(label) {
@@ -112,6 +113,7 @@ function dump(label) {
   sent.forEach((d) => {
     if (d.PAGE === undefined) { console.log('  [nur Status] ' + JSON.stringify(d)); return; }
     console.log('\n  Seite ' + (d.PAGE + 1) + '  ' + PAGE_NAMES[d.PAGE] +
+                (d.PAGE === 0 ? '  [' + PHASE_NAMES[d.PHASE] + ' ' + d.PROGRESS + ' %]' : '') +
                 '     (' + d.AGE + ', Kontingent ' + d.QUOTA + ')');
     ['L1', 'L2', 'L3', 'L4', 'L5'].forEach((k) => {
       const v = d[k] || '';
@@ -128,7 +130,7 @@ sent = [];
 fire('appmessage', { payload: { REFRESH: 1, REQUEST_PAGE: 0, LANG: LANG, CODE: CODE } });
 
 setTimeout(function () {
-  for (let p = 0; p < 6; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
+  for (let p = 0; p < 5; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
   setTimeout(function () {
     dump(CODE + ', frisch geladen · ' + (LANG ? 'Deutsch' : 'Englisch'));
     console.log('\n===== Netzabrufe =====');

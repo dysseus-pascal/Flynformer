@@ -4,9 +4,8 @@
 // fertig formatierte Kurzzeilen: auf flint bleiben von 64 KB realistisch nur
 // 10-25 KB freier Heap. Gerechnet und formatiert wird hier.
 //
-// VIER QUELLEN, nur eine kostet Kontingent:
+// DREI QUELLEN, nur eine kostet Kontingent:
 //   AviationStack  Status, Zeiten, Gate, Terminal, Verspaetung   1 Abfrage
-//   hexdb.io       Flugzeug aus dem Mode-S-Hex                   gratis
 //   adsbdb         Route und Flughafenkoordinaten aus der Nummer gratis
 //   Open-Meteo     Wetter am Ziel                                gratis
 //
@@ -22,7 +21,6 @@ var clayConfig = require('./config');
 var clay = new Clay(clayConfig, null, { autoHandleEvents: false });
 
 var AV_URL = 'https://api.aviationstack.com/v1/flights';
-var HEX_URL = 'https://hexdb.io/api/v1/aircraft/';
 var ROUTE_URL = 'https://api.adsbdb.com/v0/callsign/';
 var WX_URL = 'https://api.open-meteo.com/v1/forecast';
 
@@ -50,9 +48,7 @@ var TXT = {
   terminal:   ["Terminal",        "Terminal"],
   gate:       ["Gate",            "Gate"],
   belt:       ["Belt",            "Band"],
-  hex:        ["Hex",             "Hex"],
   unknown:    ["unknown",         "unbekannt"],
-  aircraft:   ["Aircraft",        "Flugzeug"],
   route:      ["Route",           "Strecke"],
   flighttime: ["Flight time",     "Flugzeit"],
   youare:     ["you:",            "du:"],
@@ -61,6 +57,11 @@ var TXT = {
   localtime:  ["local",           "Ortszeit"],
   nowx:       ["no weather",      "kein Wetter"],
   inn:        ["in",              "in"],
+  dshort:     ["dep",             "ab"],
+  ashort:     ["arr",             "an"],
+  attime:     ["at",              "um"],
+  remaining:  ["left",            "noch"],
+  cancelled:  ["cancelled",       "storniert"],
   since:      ["left",            "ab vor"],
   justnow:    ["just now",        "gerade eben"],
   ago:        ["",                "vor "],
@@ -89,7 +90,54 @@ var s_lang = 0;   // von der Uhr gesetzt, 0 = Englisch
 function T(id) { var r = TXT[id]; return r ? (r[s_lang] || r[0]) : ""; }
 
 var QUOTA_LIMIT = 100;                 // Gratistarif AviationStack
-var PAGE_COUNT = 6;
+var PAGE_COUNT = 5;   // Flugzeugseite entfallen: am Gate unnuetze Auskunft
+
+// ---- Flugphasen -----------------------------------------------------------
+// Der Statusschirm der Uhr zeigt nur, was in der laufenden Phase zaehlt. Die
+// Phase wird hier ausgerechnet, weil nur das Telefon die echten Zeitzonen der
+// beiden Flughaefen kennt (siehe utcOf und die aviationstack-Eigenheit oben).
+// Die Reihenfolge entspricht FnPhase in src/c/phone.h - beide muessen gleich
+// bleiben.
+var PH_PLANNED = 0, PH_BOARDING = 1, PH_DEPARTED = 2,
+    PH_ENROUTE = 3, PH_APPROACH = 4, PH_ARRIVED = 5, PH_OFF = 6;
+
+// Fenster in Minuten. Grosszuegig gewaehlt: lieber zu frueh "Boarding" als eine
+// Uhr, die am Gate noch "Geplant" behauptet.
+var BOARDING_MIN = 50;   // so lange vor dem Abflug gilt Boarding
+var DEPARTED_MIN = 20;   // so lange nach dem Abflug gilt Gestartet
+var APPROACH_MIN = 30;   // so lange vor der Ankunft gilt Landeanflug
+
+function phaseOf(av, oOff, dOff) {
+  var dep = av.departure || {}, arr = av.arrival || {};
+  var st = av.flight_status;
+  var out = { phase: PH_OFF, progress: 0, d: NaN, a: NaN };
+  if (st === 'cancelled' || st === 'incident' || st === 'diverted') return out;
+
+  // Tatsaechlich schlaegt Geschaetzt schlaegt Geplant.
+  var d = utcOf(dep.actual || dep.estimated || dep.scheduled, oOff);
+  var a = utcOf(arr.actual || arr.estimated || arr.scheduled, dOff);
+  var now = Date.now();
+  out.d = d; out.a = a;
+
+  if (st === 'landed' || (!isNaN(a) && now >= a)) {
+    out.phase = PH_ARRIVED; out.progress = 100; return out;
+  }
+  if (isNaN(d)) return out;                       // ohne Abflugzeit keine Phase
+
+  if (now < d - BOARDING_MIN * 60000) { out.phase = PH_PLANNED; return out; }
+  if (now < d)                        { out.phase = PH_BOARDING; return out; }
+
+  // In der Luft. Erst der Start, dann der Anflug, dazwischen die Strecke.
+  if (now < d + DEPARTED_MIN * 60000) out.phase = PH_DEPARTED;
+  else if (!isNaN(a) && now >= a - APPROACH_MIN * 60000) out.phase = PH_APPROACH;
+  else out.phase = PH_ENROUTE;
+
+  if (!isNaN(a) && a > d) {
+    var pc = Math.round((now - d) * 100 / (a - d));
+    out.progress = pc < 0 ? 0 : (pc > 100 ? 100 : pc);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------- Speicher
 
@@ -172,6 +220,9 @@ function dur(minutes) {
   var m = Math.round(minutes);
   var sign = m < 0 ? '-' : '';
   m = Math.abs(m);
+  // Unter einer Stunde nur Minuten. "in 0 h 30" ist zwar richtig, liest sich
+  // aber wie ein Formularfeld; am Gate will man "in 30 min" sehen.
+  if (m < 60) return sign + m + ' min';
   return sign + Math.floor(m / 60) + ' h ' + pad2(m % 60);
 }
 
@@ -223,18 +274,21 @@ function fetchStatus(code, done) {
   if (q.used >= QUOTA_LIMIT) { done(null, T('quotaout')); return; }
   var url = AV_URL + '?access_key=' + encodeURIComponent(s.key) +
             '&flight_iata=' + encodeURIComponent(code) + '&limit=5';
+  // Gezaehlt wird beim ABSENDEN, nicht beim Gelingen. aviationstack rechnet die
+  // Anfrage ab, sobald sie dort ankommt - ob die Antwort ein Zeitfehler, ein
+  // 500er oder unbrauchbares JSON ist, aendert daran nichts. Wer erst den Erfolg
+  // zaehlte, meldete zu wenig, und die Sperre bei 100 haette nie gegriffen.
+  //
+  // Dasselbe schliesst die Luecke zwischen Pruefen und Zaehlen: zwei rasch
+  // aufeinander folgende Auffrischungen lasen sonst beide denselben alten Stand
+  // und kamen beide durch.
+  quotaSpend();
   xhrJson(url, function (j, err) {
     if (err) { done(null, err); return; }
     if (j && j.error) { done(null, j.error.code || T('apierr')); return; }
-    quotaSpend();
     if (!j || !j.data || !j.data.length) { done(null, T('notfound')); return; }
     done(pickFlight(j.data, code), null);
   });
-}
-
-function fetchAircraft(hex, done) {
-  if (!hex) { done(null); return; }
-  xhrJson(HEX_URL + encodeURIComponent(hex), function (j) { done(j || null); });
 }
 
 function fetchRoute(code, done) {
@@ -275,9 +329,9 @@ function refresh(code, done) {
     rec.av = av;
     rec.at = Date.now();
 
-    var hex = av.aircraft && av.aircraft.icao24;
-    // Das Flugzeug aendert sich nicht mehr, solange derselbe Hex kommt.
-    var needAc = hex && (!rec.ac || rec.acHex !== hex);
+    // Der Abruf des Flugzeugmusters bei hexdb ist mit der Flugzeugseite
+    // entfallen. Er war kostenlos, aber er kostete Zeit vor der ersten Anzeige,
+    // und niemand wartet am Gate darauf, welcher Airbus da steht.
 
     function step2() {
       // Route und Koordinaten aendern sich praktisch nie - einmal reicht.
@@ -310,14 +364,7 @@ function refresh(code, done) {
       });
     }
 
-    if (needAc) {
-      fetchAircraft(hex, function (ac) {
-        if (ac) { rec.ac = ac; rec.acHex = hex; }
-        step2();
-      });
-    } else {
-      step2();
-    }
+    step2();
   });
 }
 
@@ -333,7 +380,7 @@ function buildPage(code, page) {
     L[0] = code || T('no_flight');
     L[1] = T('no_data');
     L[2] = T('press');
-    return L;
+    return { lines: L, phase: PH_OFF, progress: 0 };
   }
   var av = rec.av, dep = av.departure || {}, arr = av.arrival || {};
   // Echte Versaetze aus dem Wetterabruf; ohne sie wird nur gerechnet, nicht
@@ -341,17 +388,74 @@ function buildPage(code, page) {
   var oOff = rec.oOff || 0, dOff = rec.dOff || 0;
 
   if (page === 0) {
-    L[0] = (av.flight && av.flight.iata) || code;
-    L[1] = (av.airline && av.airline.name) || '';
-    var st = STATUS_TXT[av.flight_status];
-    L[2] = st ? (st[s_lang] || st[0]) : (av.flight_status || '');
-    L[3] = (dep.iata || '???') + ' → ' + (arr.iata || '???');
-    var t = utcOf(dep.estimated || dep.scheduled, oOff);
-    if (!isNaN(t)) {
-      var minLeft = (t - Date.now()) / 60000;
-      L[4] = minLeft > 0 ? T('inn') + ' ' + dur(minLeft)
-                         : T('since') + ' ' + dur(-minLeft);
+    // Der Statusschirm. Jede Phase bekommt genau die Zeilen, die in ihr etwas
+    // nuetzen - Zeile 2 ist die grosse, und in PH_ENROUTE zeichnet die Uhr
+    // zwischen Zeile 2 und 3 den Fortschrittsbalken.
+    var ph = phaseOf(av, oOff, dOff);
+    var route = (dep.iata || '???') + ' → ' + (arr.iata || '???');
+    var gateLine = (dep.terminal || dep.gate)
+        ? ((dep.terminal ? T('terminal') + ' ' + dep.terminal : '') +
+           (dep.terminal && dep.gate ? '  ' : '') +
+           (dep.gate ? T('gate') + ' ' + dep.gate : '')).trim()
+        : '';
+    var arrGate = (arr.terminal || arr.gate)
+        ? ((arr.terminal ? T('terminal') + ' ' + arr.terminal : '') +
+           (arr.terminal && arr.gate ? '  ' : '') +
+           (arr.gate ? T('gate') + ' ' + arr.gate : '')).trim()
+        : '';
+    var belt = arr.baggage ? T('belt') + ' ' + arr.baggage : '';
+    var delay = arr.delay || dep.delay;
+    var delayLine = delay ? T('delay') + ' ' + delay + ' min' : T('ontime');
+    var toDep = isNaN(ph.d) ? '' : dur((ph.d - Date.now()) / 60000);
+    var toArr = isNaN(ph.a) ? '' : dur((ph.a - Date.now()) / 60000);
+    var depAt = T('dshort') + ' ' + hhmm(dep.actual || dep.estimated || dep.scheduled);
+    var arrAt = T('ashort') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
+
+    // Hoechstens VIER Eintraege je Phase, und mit Balken nur drei: auf flint
+    // bleiben unter dem Kopfband und ueber der Fusszeile rund 105 Pixel, das
+    // sind eine grosse und drei normale Zeilen. Eine fuenfte lief in die
+    // Fusszeile hinein. Verspaetung haengt darum als "+13" an der Zeit, statt
+    // eine eigene Zeile zu belegen.
+    var delayTag = delay ? '  +' + delay : '';
+
+    if (ph.phase === PH_BOARDING) {
+      // Am Gate zaehlt das Gate.
+      L[0] = route;
+      L[1] = dep.gate ? T('gate') + ' ' + dep.gate : T('inn') + ' ' + toDep;
+      L[2] = dep.terminal ? T('terminal') + ' ' + dep.terminal : '';
+      L[3] = depAt + (dep.gate ? '  ' + T('inn') + ' ' + toDep : delayTag);
+    } else if (ph.phase === PH_DEPARTED) {
+      L[0] = route;
+      L[1] = arrAt;
+      L[2] = depAt + delayTag;
+    } else if (ph.phase === PH_ENROUTE) {
+      // Zeile 3 steht unter dem Balken, den die Uhr dazwischen zeichnet.
+      L[0] = route;
+      L[1] = T('remaining') + ' ' + toArr;
+      L[2] = arrAt + delayTag;
+    } else if (ph.phase === PH_APPROACH) {
+      // Der Countdown steht schon gross da; die Ankunftszeit waere dieselbe
+      // Auskunft zweimal. Wichtig ist jetzt, wohin man laeuft.
+      L[0] = '→ ' + (arr.iata || '???');
+      L[1] = T('inn') + ' ' + toArr;
+      L[2] = arrGate;
+      L[3] = belt;
+    } else if (ph.phase === PH_ARRIVED) {
+      L[0] = arr.iata || '???';
+      L[1] = T('attime') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
+      L[2] = arrGate;
+      L[3] = belt;
+    } else if (ph.phase === PH_OFF) {
+      var sto = STATUS_TXT[av.flight_status];
+      L[0] = route;
+      L[1] = sto ? (sto[s_lang] || sto[0]) : (av.flight_status || T('unknown'));
+    } else {                              // PH_PLANNED
+      L[0] = route;
+      L[1] = T('inn') + ' ' + toDep;
+      L[2] = depAt + delayTag;
+      L[3] = gateLine;
     }
+    return { lines: L, phase: ph.phase, progress: ph.progress };
   } else if (page === 1) {
     L[0] = T('dep') + ' ' + (dep.iata || '');
     L[1] = T('sched') + ' ' + hhmm(dep.scheduled) +
@@ -372,18 +476,6 @@ function buildPage(code, page) {
            '  ' + T('gate') + ' ' + (arr.gate || '?');
     L[4] = arr.baggage ? T('belt') + ' ' + arr.baggage : '';
   } else if (page === 3) {
-    var ac = rec.ac;
-    if (ac) {
-      L[0] = ac.Registration || '';
-      L[1] = ((ac.Manufacturer || '') + ' ' + (ac.Type || '')).trim();
-      L[2] = ac.ICAOTypeCode || '';
-      L[3] = ac.RegisteredOwners || '';
-      L[4] = ac.ModeS ? T('hex') + ' ' + ac.ModeS : '';
-    } else {
-      L[0] = T('aircraft');
-      L[1] = T('unknown');
-    }
-  } else if (page === 4) {
     var rt = rec.rt;
     if (rt) {
       L[0] = dist(haversineKm(rt.oLat, rt.oLon, rt.dLat, rt.dLon), s.units);
@@ -396,7 +488,7 @@ function buildPage(code, page) {
       L[0] = T('route');
       L[1] = T('unknown');
     }
-  } else if (page === 5) {
+  } else if (page === 4) {
     var wx = rec.wx, rt2 = rec.rt;
     L[0] = T('dest') + ' ' + (arr.iata || '');
     if (wx) {
@@ -409,7 +501,7 @@ function buildPage(code, page) {
     }
     if (rt2 && rt2.dCity) L[4] = rt2.dCity;
   }
-  return L;
+  return { lines: L, phase: PH_OFF, progress: 0 };
 }
 
 function ageText(code) {
@@ -422,13 +514,21 @@ function ageText(code) {
 }
 
 function sendPage(code, page) {
-  var L = buildPage(code, page);
+  var b = buildPage(code, page);
+  var L = b.lines;
   var q = quota();
   Pebble.sendAppMessage({
     PAGE: page,
     L1: L[0], L2: L[1], L3: L[2], L4: L[3], L5: L[4],
+    // Die Uhr waehlt danach die Ueberschrift und zeichnet den Balken.
+    PHASE: b.phase,
+    PROGRESS: b.progress,
     AGE: ageText(code),
-    QUOTA: q.used + ' / ' + QUOTA_LIMIT
+    QUOTA: q.used + ' / ' + QUOTA_LIMIT,
+    // Zu welchem Flug diese Antwort gehoert. Die Uhr wirft sie weg, wenn die
+    // Nummer inzwischen eine andere ist - sonst stuenden die Zeiten des vorigen
+    // Fluges unter der neuen Nummer und wuerden dort auch noch gespeichert.
+    FNO: String(code || '')
   }, function () {}, function () { console.log('AppMessage: Senden fehlgeschlagen'); });
 }
 
@@ -469,10 +569,22 @@ Pebble.addEventListener('webviewclosed', function (e) {
   if (dict.UNITS !== undefined) s.units = String(dict.UNITS.value || 'metric');
   // Die Flugnummer steht bewusst NICHT mehr hier: sie wird auf der Uhr
   // eingegeben und mit jeder Anfrage mitgeschickt.
-  save(S_SETTINGS, s);
-  if (dict.QUOTA_RESET !== undefined && dict.QUOTA_RESET.value) {
-    save(S_QUOTA, { month: monthKey(), used: 0 });
+  // Der Zaehler wird nur beim UMLEGEN des Schalters zurueckgesetzt, nicht bei
+  // jedem Speichern. Clay zeigt die Konfigseite mit den zuletzt gesendeten
+  // Werten wieder an, der Schalter steht also weiterhin auf ein - und ohne
+  // diese Flanke nullte jedes spaetere Speichern den Zaehler still mit. Die
+  // Fusszeile zeigte dann 0 von 100, waehrend das Kontingent schon fast weg war.
+  // Nur wenn der Schalter ueberhaupt mitgeschickt wurde, darf seine Stellung
+  // gemerkt werden. Sonst loeschte eine unvollstaendige Antwort - etwa eine
+  // abgebrochene Konfigseite - die Erinnerung, und das naechste gewoehnliche
+  // Speichern nullte den Zaehler erneut: genau der Fehler, den die Flanke
+  // beheben soll.
+  if (dict.QUOTA_RESET !== undefined) {
+    var wantReset = !!dict.QUOTA_RESET.value;
+    if (wantReset && !s.resetSeen) save(S_QUOTA, { month: monthKey(), used: 0 });
+    s.resetSeen = wantReset;
   }
+  save(S_SETTINGS, s);
   console.log('Einstellungen gespeichert, Schluessel ' +
               (s.key ? 'gesetzt' : 'FEHLT'));
 });
@@ -488,7 +600,11 @@ Pebble.addEventListener('appmessage', function (e) {
     if (!code) { sendPage('', 0); return; }
     refresh(code, function (err) {
       if (err) {
-        Pebble.sendAppMessage({ STATUS: err }, function () {}, function () {});
+        // Auch die Fehlermeldung traegt die Flugnummer, sonst liesse der
+        // Stale-Filter der Uhr den Fehler des VORIGEN Fluges unter der neuen
+        // Nummer durch.
+        Pebble.sendAppMessage({ STATUS: err, FNO: String(code || '') },
+                              function () {}, function () {});
         return;
       }
       updateGps(code, function () {

@@ -3,8 +3,8 @@
 #include "theme.h"
 #include "strings.h"
 
-// Flugnummer auf der Uhr eingeben - zwei Buchstaben und bis zu vier Ziffern,
-// also LH400, LX100, EK88 oder LH1234.
+// Flugnummer auf der Uhr eingeben - zweistelliges Kuerzel und bis zu vier
+// Ziffern, also LH400, LX100, EK88, LH1234 oder U21234.
 //
 // Die Uhr hat keine Tastatur. Bewaehrt ist deshalb das Muster, das auch der
 // Timer benutzt: eine Stelle ist gewaehlt, Hoch und Runter blaettern durch die
@@ -28,11 +28,18 @@ static InputDone s_done;
 // duerfen leer bleiben - deshalb steht dort zusaetzlich das Leerzeichen.
 static char prv_next(int slot, char c, int dir) {
   if (slot < FIRST_DIGIT) {
-    if (c < 'A' || c > 'Z') return 'A';
-    int v = c - 'A' + dir;
-    if (v < 0) v = 25;
-    if (v > 25) v = 0;
-    return (char)('A' + v);
+    // Die ersten beiden Stellen sind das IATA-Kuerzel - und das ist
+    // alphanumerisch, nicht bloss Buchstaben: U2 ist easyJet, W6 Wizz Air,
+    // 4U war Eurowings. Wer hier nur A-Z anbietet, sperrt diese Gesellschaften
+    // komplett aus. Darum A-Z gefolgt von 0-9, 36 Zeichen im Kreis.
+    int v;
+    if (c >= 'A' && c <= 'Z') v = c - 'A';
+    else if (c >= '0' && c <= '9') v = 26 + (c - '0');
+    else v = 0;
+    v += dir;
+    if (v < 0) v = 35;
+    if (v > 35) v = 0;
+    return (v < 26) ? (char)('A' + v) : (char)('0' + (v - 26));
   }
   const bool blank_ok = (slot > FIRST_DIGIT);
   const int span = blank_ok ? 11 : 10;          // 0..9 und ggf. Leerzeichen
@@ -43,12 +50,33 @@ static char prv_next(int slot, char c, int dir) {
   return (v == 10) ? ' ' : (char)('0' + v);
 }
 
-// Leerstellen nach hinten durchziehen
-static void prv_normalise(void) {
+// Leerstellen nach hinten durchziehen - fuer die Vorbelegung, die aus einer
+// bereits gueltigen Nummer kommt.
+static void prv_trim_tail(void) {
   bool blank = false;
   for (int i = FIRST_DIGIT; i < SLOTS; i++) {
     if (s_buf[i] == ' ') blank = true;
     if (blank) s_buf[i] = ' ';
+  }
+}
+
+// Nach einer Aenderung an Stelle 'changed' die Regel "Leerstellen nur am Ende"
+// wiederherstellen - und zwar in die Richtung, in die der Benutzer gerade
+// gedrueckt hat:
+//
+//   geleert   -> alles dahinter faellt mit
+//   belegt    -> Luecken davor werden mit 0 geschlossen
+//
+// Der zweite Fall ist der Grund fuer diese Unterscheidung. Vorher wurde immer
+// nur nach hinten geraeumt, und damit waren Hoch und Runter auf jeder Stelle
+// hinter einer Luecke tot: die Eingabe wurde im selben Atemzug wieder
+// weggeraeumt, den Tastendruck sah man nie.
+static void prv_normalise(int changed) {
+  if (changed < FIRST_DIGIT) return;
+  if (s_buf[changed] == ' ') {
+    for (int i = changed; i < SLOTS; i++) s_buf[i] = ' ';
+  } else {
+    for (int i = FIRST_DIGIT; i < changed; i++) if (s_buf[i] == ' ') s_buf[i] = '0';
   }
 }
 
@@ -107,13 +135,13 @@ static void prv_update(Layer *layer, GContext *ctx) {
 
 static void prv_up(ClickRecognizerRef rec, void *ctx) {
   s_buf[s_slot] = prv_next(s_slot, s_buf[s_slot], +1);
-  prv_normalise();
+  prv_normalise(s_slot);
   layer_mark_dirty(s_canvas);
 }
 
 static void prv_down(ClickRecognizerRef rec, void *ctx) {
   s_buf[s_slot] = prv_next(s_slot, s_buf[s_slot], -1);
-  prv_normalise();
+  prv_normalise(s_slot);
   layer_mark_dirty(s_canvas);
 }
 
@@ -177,7 +205,7 @@ void input_window_push(const char *preset, InputDone done) {
   if (preset && preset[0]) {
     for (int i = 0; i < SLOTS && preset[i]; i++) s_buf[i] = preset[i];
   }
-  prv_normalise();
+  prv_trim_tail();
 
   s_window = window_create();
   window_set_background_color(s_window, FN_COLOR_BG);

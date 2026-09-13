@@ -5,7 +5,23 @@
 // sondern fuer jede Seite fuenf fertig formatierte Zeilen - auf flint bleiben
 // von 64 KB nur wenige Kilobyte freier Heap.
 
-#define FN_PAGE_COUNT 6
+// Fuenf Seiten. Die Flugzeugseite (Kennzeichen, Muster, Halter) ist entfallen:
+// am Gate will niemand wissen, welcher Airbus da steht.
+#define FN_PAGE_COUNT 5
+
+// Flugphasen. Die Telefonseite rechnet sie aus den Zeiten aus und schickt sie
+// mit; die Uhr waehlt danach die Ueberschrift und ob ein Fortschrittsbalken
+// gezeichnet wird. Die Reihenfolge ist der zeitliche Ablauf.
+typedef enum {
+  FN_PHASE_PLANNED = 0,   // noch lange hin
+  FN_PHASE_BOARDING,      // Gate offen
+  FN_PHASE_DEPARTED,      // gerade gestartet
+  FN_PHASE_ENROUTE,       // unterwegs - hier gibt es den Balken
+  FN_PHASE_APPROACH,      // im Landeanflug
+  FN_PHASE_ARRIVED,       // gelandet
+  FN_PHASE_OFF,           // storniert, umgeleitet, unbekannt
+  FN_PHASE_COUNT
+} FnPhase;
 #define FN_LINE_LEN   28   // laengste Zeile, die auf emery in eine Zeile passt
 #define FN_SHORT_LEN  16
 
@@ -16,6 +32,8 @@ typedef struct {
   char fno[12];               // "LH400"
   char status[FN_LINE_LEN];   // Fehlertext, sonst leer
   int  page;
+  int  phase;                 // FnPhase, nur auf Seite 0 von Belang
+  int  progress;              // 0..100, nur in FN_PHASE_ENROUTE
   bool fresh;                 // true = gerade vom Telefon, false = gespeichert
 } FnPage;
 
