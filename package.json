@@ -1,0 +1,54 @@
+{
+  "name": "flynformer",
+  "author": "dysseus-pascal",
+  "version": "0.1.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
+  "pebble": {
+    "displayName": "Flynformer",
+    "uuid": "02f2dd2d-ea1e-47f6-bc53-634ddff67e0f",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "messageKeys": [
+      "REQUEST_PAGE",
+      "REFRESH",
+      "PAGE",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5",
+      "STATUS",
+      "AGE",
+      "QUOTA",
+      "FNO",
+      "LANG",
+      "API_KEY",
+      "FLIGHT1",
+      "FLIGHT2",
+      "FLIGHT3",
+      "UNITS",
+      "QUOTA_RESET"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}
