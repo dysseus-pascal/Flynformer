@@ -93,14 +93,15 @@ sonst läge er in diesem öffentlichen Repository für jeden lesbar.
 | Zurück | beenden |
 
 **Der Anflug ist die Ladeanzeige.** Er läuft, wenn Daten geholt werden — nach
-einer Eingabe und beim Aktualisieren: das Flugzeug fliegt aus der Tiefe nach vorn
-und oben aus dem Bild und gibt die Seite frei. Kommen die Daten früher an, fliegt
-es trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
+einer Eingabe und beim Aktualisieren. Kommen die Daten früher an, fliegt er
+trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
 
-Wachsen und Steigen liegen dabei auf **derselben** Kurve. Vorher wuchs die Grösse
-quadratisch, die Höhe aber kubisch, also deutlich später: das Flugzeug wurde erst
-riesig und wurde dann nach oben gerissen, wobei seine Unterkante ein zweites Mal
-durchs Bild fuhr — es sah aus, als flöge gleich noch eines hinterher.
+Der Weg ist ein **Bogen**: das Flugzeug taucht als Punkt am oberen Rand auf,
+wächst gleichmässig, zieht dabei nach unten durch die Bildmitte und steigt gross
+wieder nach oben aus dem Bild — so, wie eine Maschine über einen hinwegzieht.
+Als Formel `y = h · u · (3 − 4u)`, mit `u` als Fortschritt von 0 bis 1. Die
+Grösse wächst dabei gleichmässig durch, ohne Beschleunigung: das Ruhige an der
+Bewegung ist das Wachsen, die Kurve macht der Weg.
 
 **Beim Öffnen fliegt nichts und kostet nichts.** Da steht sofort der gespeicherte
 Stand mit seinem Alter. Das ist Absicht: ein Anflug beim Start hiesse, dass
@@ -109,17 +110,32 @@ wäre das Kontingent in 25 Tagen.
 
 ## Das Flugzeug
 
-Von vorn gesehen, gezeichnet als vier geschlossene Polygone: Höhenleitwerk,
-Hauptumriss mit 18 Punkten, zwei Triebwerksgondeln. Kein Bitmap — nur deshalb
-kann es beim Anflug vom Achtzigstel auf das Vierfache wachsen, ohne zu treppen.
-Erst die Triebwerke machen aus der Silhouette ein Verkehrsflugzeug.
+Von vorn gesehen, als **gefüllte Fläche** aus Polygonen und Kreisen — kein
+Bitmap, nur deshalb kann es beim Anflug vom Punkt auf das Dreifache der
+Bildbreite wachsen, ohne zu treppen.
 
-Die Zeichenreihenfolge ist wesentlich: Höhenleitwerk zuerst (es liegt hinten),
-dann der Hauptumriss darüber, zuletzt die Triebwerke.
+Eine Fläche und keine Kontur, weil es früh im Anflug nur ein paar Pixel gross
+ist: von einer Strichzeichnung bliebe dort nichts als Gekrakel. Erst die
+Aussparungen machen daraus eine Figur — zwei Kanzelfenster und der dunkle
+Lufteinlass in jeder Gondel.
+
+**Die Gondeln sind Kreise.** Von vorn gesehen ist eine Triebwerksgondel rund.
+Vorher waren es schräge Vierecke, die flach auf dem Flügel sassen — die lasen
+sich als Landeklappen. Die Kreise hängen unter dem Flügel und wölben sich nach
+unten heraus. Sie bekommen bewusst **keinen** schwarzen Ring: der lag genau über
+dem Flügel und durchtrennte ihn.
+
+**Die Flügel steigen nach aussen an.** Diese V-Stellung ist das Merkmal, an dem
+man eine Frontansicht auf einen Blick erkennt; waagrechte Flügel liessen offen,
+von wo man draufschaut. Sie sind mit zehn bis elf Rastereinheiten bewusst dick —
+der Umriss liegt mittig auf der Kante und frisst von beiden Seiten.
+
+Zeichenreihenfolge von hinten nach vorn: Seiten- und Höhenleitwerk, Rumpf,
+Gondeln, zuletzt die Aussparungen.
 
 Auf `flint` gibt es kein Amber. Dort ist das Kopfband weiss mit schwarzer
-Schrift, und die Flugzeugkontur wird weiss auf schwarzem Grund — dasselbe
-Verhältnis ohne Farbe.
+Schrift, und das Flugzeug wird eine weisse Fläche mit schwarzen Aussparungen —
+dasselbe Verhältnis ohne Farbe.
 
 ## Was diese App nicht kann
 
