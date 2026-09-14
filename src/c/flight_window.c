@@ -162,14 +162,18 @@ static void prv_update(Layer *layer, GContext *ctx) {
            GRect(m, band / 2 + 1, b.size.w - 2 * m, band / 2), GTextAlignmentCenter);
 #endif
 
+  // Die Trennlinie laeuft NUR ueber die Karte, nicht ueber die Seitenleiste.
+  // Zog man sie ueber die volle Breite, blieb zwischen Band und Leiste eine
+  // zwei Pixel hohe helle Luecke stehen - die Leiste hing dann unter dem Band,
+  // statt daran. Jetzt gehen beide ohne Naht ineinander ueber.
   graphics_context_set_fill_color(ctx, FN_COLOR_BG);
-  graphics_fill_rect(ctx, GRect(0, band, b.size.w, 2), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0, band, b.size.w - side, 2), 0, GCornerNone);
 
   graphics_context_set_fill_color(ctx, FN_COLOR_ACCENT);
-  graphics_fill_rect(ctx, GRect(b.size.w - side, band + 2, side, b.size.h - band - 2),
+  graphics_fill_rect(ctx, GRect(b.size.w - side, band, side, b.size.h - band),
                      0, GCornerNone);
   const int16_t dcx = b.size.w - side / 2;
-  const int16_t dtop = band + 2 + (b.size.h - band - 2) / 2 - (FN_PAGE_COUNT * 11) / 2;
+  const int16_t dtop = band + (b.size.h - band) / 2 - (FN_PAGE_COUNT * 11) / 2;
   for (int i = 0; i < FN_PAGE_COUNT; i++) {
     const bool on = (i == s_page);
     graphics_context_set_fill_color(ctx, on ? FN_COLOR_ON_ACCENT : FN_COLOR_BG);
