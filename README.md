@@ -149,16 +149,17 @@ trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
 Der Weg ist ein **Bogen**: das Flugzeug taucht als Punkt am oberen Rand auf,
 wächst gleichmässig, zieht dabei nach unten durch die Bildmitte und steigt gross
 wieder nach oben aus dem Bild — so, wie eine Maschine über einen hinwegzieht.
-Als Formel `y = h · (3,35u − 4,7u²)`, mit `u` als Fortschritt von 0 bis 1: bei
-`u = 0` am oberen Rand, bei `u = 0,36` am tiefsten Punkt knapp unter der Mitte,
-bei `u = 1` eineinhalb Bildhöhen darüber. Die Grösse wächst gleichmässig durch,
+Als Formel `y = h · (2,9u − 3,8u²)`, mit `u` als Fortschritt von 0 bis 1: bei
+`u = 0` am oberen Rand, bei `u = 0,38` am tiefsten Punkt knapp unter der Mitte,
+bei `u = 1` knapp eine Bildhöhe darüber. Die Grösse wächst gleichmässig durch,
 ohne Beschleunigung: das Ruhige an der Bewegung ist das Wachsen, die Kurve macht
 der Weg.
 
-Der Hub von 1,35 Bildhöhen ist nicht gegriffen: seit die Gondeln an Pylonen
-tiefer hängen, liegt die Unterkante bei 87 von 100 Rastereinheiten. Bei
-dreifacher Bildbreite sind das gut ein Drittel der Grösse unter der Mitte — mit
-nur einer Bildhöhe blieben sie am Ende sichtbar im Bild hängen.
+Der Hub hängt an der Unterkante des Flugzeugs, und die wanderte mit jedem
+Entwurf: mit Pylonen lag sie bei 87 von 100 Rastereinheiten und brauchte 1,35
+Bildhöhen, ohne sie bei 75 und braucht 0,90. Zu viel Hub ist nicht falsch, aber
+dann ist das Flugzeug längst draussen, während die Animation noch läuft — und
+der Schirm steht die letzte Zehntelsekunde leer.
 
 **Beim Öffnen fliegt nichts und kostet nichts.** Da steht sofort der gespeicherte
 Stand mit seinem Alter. Das ist Absicht: ein Anflug beim Start hiesse, dass
@@ -173,19 +174,28 @@ Dreifache der Bildbreite wachsen, ohne zu treppen.
 
 Was die Zeichnung vorgibt:
 
-- **Sechseckiger Rumpf.** Kantig, nicht rund: flache Oberkante, zwei kurze
-  Schultern nach aussen, zwei lange Flanken auf eine flache Unterkante.
+- **Gedrungener Rumpf mit gebrochenen Ecken.** Ein Zwölfeck, 40 breit und 48
+  hoch. Der erste Entwurf stand mit 36 zu 52 hochkant und zog damit das Gesicht
+  in die Länge.
 - **Waagrechte Flügel.** Lange dünne Balken fast über die volle Breite, ohne
   V-Stellung.
-- **Triebwerke an Pylonen.** Sie hängen an einem sichtbaren Steg deutlich unter
-  dem Flügel, statt mit ihm zu verschmelzen. Erst dadurch darf die Gondel ihren
-  dunklen Rand behalten: sie liegt nicht mehr über dem Flügel und kann ihn nicht
-  mehr durchtrennen — was sie in einem früheren Entwurf tat, mit einem Stummel
-  innen und einem abgetrennten Balken aussen.
-- **Ein Gesicht.** Zwei quadratische Fenster mit dunklen Pupillen und ein breites
-  V darunter. Das ist der Unterschied zwischen Flugzeug und
-  Zeichentrickflugzeug, und eine Fläche mit Aussparungen liest sich auf dem
-  kleinen Schirm schneller als jede Strichzeichnung.
+- **Triebwerke ohne Pylone, dicht am Flügel.** Die Stege waren zwei dünne
+  Striche, die nichts erklärten und auf 144 Pixeln nur Unruhe machten. Die
+  Gondel überlappt den Flügel jetzt, statt ihn nur zu berühren — bei blosser
+  Berührung legen sich die dunkle Flügelkante und der dunkle Gondelrand
+  nebeneinander und lesen sich als Spalt. Gezeichnet wird sie **nach** dem
+  Flügel, liegt also davor: so, wie das Triebwerk einer echten Maschine vor der
+  Flügelvorderkante sitzt.
+- **Ein Gesicht.** Zwei quadratische Fenster mit dunklen Pupillen und darunter
+  ein flaches, weites Lächeln. Es folgt dem Glas aus Drinktervall: dort ist der
+  Mund eine offene Polylinie, 23 Einheiten breit und nur 3 tief. Hier sind es 24
+  zu 4, also dasselbe Verhältnis. Vorher war er 18 breit und 14 tief und las
+  sich damit als Schnabel.
+
+  Zwei Unterschiede zur Vorlage, beide mit Grund: das Glas zieht einen **Strich**,
+  weil es selbst hell mit dunkler Kontur ist — hier wird der Mund in eine Fläche
+  geschnitten und braucht deshalb Dicke. Und die Zwischenpunkte machen aus dem
+  Knick einen Bogen; ein gezogener Strich rundet an der Ecke von selbst.
 
 Unterhalb von 70 Pixeln Grösse bleiben die Feinheiten weg — Mittellinie der
 Finne und die inneren Augenlagen. Klein gezeichnet würde daraus nur Matsch, und
