@@ -5,6 +5,7 @@
 #include "phone.h"
 #include "plane_fx.h"
 #include "strings.h"
+#include "wake.h"
 
 // Fuenf Seiten im Timeline-Look: Kopfband in Amber mit Flugnummer und
 // Ueberschrift, schwarze 2-px-Linie, Karte mit Zeilen, Seitenleiste rechts mit
@@ -29,6 +30,9 @@ static int s_page;
 static bool s_intro;      // Anflug laeuft gerade
 static bool s_asked;      // Eingabe schon gezeigt (nicht in einer Schleife)
 static AppTimer *s_open_input;
+static bool s_woken;      // von einem Wakeup gestartet, nicht von Hand
+static bool s_reported;   // Aenderung schon vibriert
+static AppTimer *s_bail;  // Notausgang, falls das Telefon nicht antwortet
 
 static void prv_start_input(void);
 
@@ -172,8 +176,15 @@ static void prv_update(Layer *layer, GContext *ctx) {
     y += big ? BIG_H : LINE_H;
   }
 
-  graphics_context_set_text_color(ctx, FN_COLOR_DIM);
   const int16_t fy = b.size.h - 17;
+  // Eine Aenderung verdraengt Alter und Kontingent und steht in der Akzentfarbe
+  // da - sie ist der Grund, warum die Uhr ueberhaupt nachgesehen hat.
+  if (p->change[0]) {
+    graphics_context_set_text_color(ctx, FN_COLOR_ACCENT);
+    prv_text(ctx, p->change, F_FOOT, GRect(m, fy, cw - m - 4, 16), al);
+    return;
+  }
+  graphics_context_set_text_color(ctx, FN_COLOR_DIM);
   if (p->status[0]) {
     prv_text(ctx, p->status, F_FOOT, GRect(m, fy, cw - m - 4, 16), al);
   } else {
@@ -182,8 +193,40 @@ static void prv_update(Layer *layer, GContext *ctx) {
   }
 }
 
+// Nach dem Weckstart hat die App nichts mehr zu tun. Ueber einen Zeitgeber,
+// damit sie nicht mitten im Zeichnen verschwindet.
+static void prv_leave(void *data) {
+  s_bail = NULL;
+  window_stack_pop_all(false);
+}
+
+static void prv_schedule_leave(uint32_t ms) {
+  if (s_bail) app_timer_cancel(s_bail);
+  s_bail = app_timer_register(ms, prv_leave, NULL);
+}
+
 static void prv_on_update(void) {
   if (s_canvas) layer_mark_dirty(s_canvas);
+
+  // Das Telefon schickt die naechste Weckzeit mit. -1 heisst "nichts gesagt",
+  // 0 heisst "nicht mehr wecken" - beides darf den Plan nicht versehentlich
+  // loeschen, darum die Unterscheidung.
+  const int32_t nw = phone_next_wake();
+  if (nw >= 0) wake_set((time_t)nw);
+
+  const FnPage *p = phone_page();
+  if (p->change[0] && !s_reported) {
+    s_reported = true;
+    vibes_double_pulse();
+    light_enable_interaction();
+    // Gibt es etwas zu melden, bleibt die App stehen, bis jemand hinsieht -
+    // auch wenn sie nur geweckt wurde.
+    if (s_bail) { app_timer_cancel(s_bail); s_bail = NULL; }
+    return;
+  }
+  // Geweckt und nichts Neues: still wieder verschwinden. Ein paar Sekunden
+  // Luft, damit die Antwort fertig gezeichnet ist, falls doch jemand hinsieht.
+  if (s_woken && p->fresh) prv_schedule_leave(2500);
 }
 
 static void prv_intro_done(void) {
@@ -251,6 +294,9 @@ static void prv_open_input_later(void *data) {
 static void prv_appear(Window *window) {
   // Ohne Flugnummer geht es direkt in die Eingabe - aber nur einmal, sonst
   // faenden sich Eingabe und Hauptfenster in einer Schleife wieder.
+  // Beim Weckstart keine Eingabe aufdraengen: niemand steht davor. Ohne Nummer
+  // gibt es dann auch nichts zu pruefen, also gleich wieder weg.
+  if (s_woken && !phone_code()[0]) { prv_schedule_leave(100); return; }
   if (!phone_code()[0] && !s_asked) {
     s_asked = true;
     if (!s_open_input) s_open_input = app_timer_register(50, prv_open_input_later, NULL);
@@ -265,16 +311,29 @@ static void prv_load(Window *window) {
 
   phone_init(prv_on_update);
   s_page = 0;
+  if (!phone_code()[0]) return;
+
   // NUR der gespeicherte Stand, und der kostet nichts. Hier stand einmal ein
   // prv_fetch(), und damit war jeder App-Start ein bezahlter Abruf: wer viermal
   // am Tag aufs Gate schaut, verbrauchte 120 Abrufe im Monat gegen ein
   // Kontingent von 100 - ohne je die Mitteltaste gedrueckt zu haben.
   // Aktualisiert wird auf Wunsch, nicht beim Hinsehen.
-  if (phone_code()[0]) phone_request_page(0);
+  phone_request_page(0);
+
+  if (s_woken) {
+    // Der Weckstart ist der EINZIGE Fall, in dem die App von sich aus eine
+    // Abfrage ausgibt - genau dafuer wurde sie ja geweckt. Ohne Anflug: das
+    // Flugzeug ist die Ladeanzeige fuer jemanden, der hinsieht, und hier sieht
+    // niemand hin.
+    phone_refresh(0);
+    // Antwortet das Telefon gar nicht, darf die App nicht ewig offen stehen.
+    prv_schedule_leave(20000);
+  }
 }
 
 static void prv_unload(Window *window) {
   if (s_open_input) { app_timer_cancel(s_open_input); s_open_input = NULL; }
+  if (s_bail) { app_timer_cancel(s_bail); s_bail = NULL; }
   plane_fx_stop();
   phone_deinit();
   layer_destroy(s_canvas);
@@ -283,9 +342,11 @@ static void prv_unload(Window *window) {
   s_window = NULL;
 }
 
-void flight_window_push(void) {
+void flight_window_push(bool woken) {
   if (s_window) return;
   s_asked = false;
+  s_woken = woken;
+  s_reported = false;
   s_window = window_create();
   window_set_background_color(s_window, FN_COLOR_BG);
   window_set_click_config_provider(s_window, prv_click_config);

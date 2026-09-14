@@ -60,6 +60,56 @@ sondern das, was auf `flint` zwischen Kopfband und Fusszeile passt; eine fünfte
 Zeile lief in die Fusszeile hinein. Verspätung hängt darum als `+13` an der
 Zeit, statt eine eigene Zeile zu belegen.
 
+## Timeline und Meldungen
+
+Der Flug steht als **Pin in der Timeline**, mit Gate, Terminal und beiden
+Zeiten. Der Pin trägt zwei **Erinnerungen** — zwei Stunden und eine halbe Stunde
+vor dem Abflug. Die vibrieren **von selbst**, ohne dass die App läuft; das ist
+der eigentliche Grund, warum die Pins mehr wert sind als jedes Pollen.
+
+Ändert sich etwas, geht der Pin mit einer `updateNotification` erneut hinaus,
+und die Uhr meldet sich — auch wenn die App längst zu ist. Gemeldet werden:
+
+| | |
+|---|---|
+| Status | annulliert, umgeleitet, Zwischenfall, gestartet, gelandet |
+| Gate | am Abflug und an der Ankunft |
+| Terminal | schwerer als ein Gate-Wechsel: anderes Gebäude |
+| Zeiten | erst ab fünf Minuten Verschiebung |
+| Gepäckband | sobald es zugeteilt ist |
+
+Countdown und Fortschritt stehen bewusst **nicht** auf dieser Liste. Die ändern
+sich bei jedem Abruf und wären keine Nachricht, sondern Lärm.
+
+Der Pin hat eine feste Kennung aus Flugnummer und Flugtag. Ein erneutes Senden
+überschreibt ihn also, statt einen zweiten anzulegen — und er geht nur hinaus,
+wenn sich sein Inhalt wirklich geändert hat. Ohne diese Sperre erschiene die
+Änderungsmeldung bei jeder Auffrischung.
+
+## Selbst nachsehen — und was es kostet
+
+Auf Wunsch sieht die Uhr vor dem Abflug selbst nach:
+
+| Wann | Wie oft |
+|---|---|
+| mehr als 3 h vorher | gar nicht |
+| 3 h bis 1 h vorher | stündlich |
+| letzte Stunde | alle 20 Minuten |
+| nach dem Abflug | einmal bei der Landung, dann Schluss |
+
+Das sind rund **acht Abfragen je Flug**, also gut zwölf Flüge im Monat.
+
+**Ein Vorbehalt, der nicht wegzudiskutieren ist:** Pebble kennt keinen stillen
+Hintergrundlauf. Der Header sagt wörtlich *„schedule to be launched"* — ein
+Wakeup **startet die App**, im Vordergrund. Der einzige echte Hintergrundprozess
+(Worker) kann kein AppMessage und erreicht das Telefon gar nicht. Bei jedem
+Nachsehen springt Flynformer also kurz vor das Zifferblatt und verschwindet
+wieder. Genau deshalb wird nur nahe am Abflug geweckt, und genau deshalb
+beendet sich die App sofort, sobald sie nichts Meldenswertes gefunden hat.
+
+Wem das zu viel ist, schaltet *Selbst nachsehen* in den Einstellungen aus. Die
+Pins und ihre Erinnerungen bleiben davon unberührt — die brauchen kein Wecken.
+
 ## Einrichten
 
 **Einmal am Telefon**, in der Pebble-App unter *Flynformer → Einstellungen*:
@@ -141,9 +191,10 @@ dasselbe Verhältnis ohne Farbe.
 
 Ehrlicher als es zu verschweigen:
 
-- **Keine Aktualisierung im Hintergrund.** PebbleKit JS läuft nur, solange die
-  App auf der Uhr läuft, und wird beim Beenden gestoppt. Ohne eigenen Server
-  gibt es kein stilles Nachladen.
+- **Kein stiller Hintergrundlauf.** PebbleKit JS läuft nur, solange die App
+  läuft. Ein Wakeup kann sie zwar starten und dabei Daten holen — aber er
+  startet sie sichtbar, vor dem Zifferblatt. Ohne eigenen Server gibt es kein
+  lautloses Nachladen.
 - **Nichts zum Flugzeug selbst.** Kennzeichen, Muster und Halter waren einmal
   eine eigene Seite. Sie ist entfallen: am Gate will niemand wissen, welcher
   Airbus da steht, und der Umweg über den Mode-S-Hex kostete Zeit vor der ersten
@@ -176,12 +227,20 @@ Koordinaten, 780 Byte, kostenlos.
 ## Werkzeuge
 
 ```bash
+node tools/pkjs_alert_test.js          # Pins, Meldungen, Weckplan
 node tools/pkjs_phase_test.js          # der Statusschirm in allen Flugphasen
 node tools/pkjs_quota_test.js          # was kostet was
 node tools/pkjs_pages_test.js          # alle sechs Seiten, deutsch
 FN_LANG=en node tools/pkjs_pages_test.js   # dasselbe auf englisch
 node tools/strings_check.js            # prüft src/c/strings_table.h
 ```
+
+`pkjs_alert_test.js` nagelt die drei Dinge fest, die etwas kosten, wenn sie
+falsch sind: den Weckplan (jedes Aufwachen kostet eine Abfrage), die
+Änderungserkennung (wer Countdowns mitvergleicht, meldet bei jedem Abruf etwas)
+und den Pin (einer, der bei jeder Auffrischung erneut hinausgeht, meldet jedes
+Mal eine Änderung, die keine ist). Dass er wirklich fängt, wurde geprüft, indem
+die Sperren versuchsweise zurückgebaut wurden.
 
 `pkjs_phase_test.js` stellt die Uhr statt den Flug: dieselbe aufgezeichnete
 Antwort wird sechsmal ausgewertet — vier Stunden vor dem Abflug, am Gate, kurz

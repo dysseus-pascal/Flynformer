@@ -62,6 +62,12 @@ var TXT = {
   attime:     ["at",              "um"],
   remaining:  ["left",            "noch"],
   cancelled:  ["cancelled",       "storniert"],
+  was:        ["was",             "war"],
+  changed:    ["changed",         "geändert"],
+  newflight:  ["flight added",    "Flug eingetragen"],
+  open_app:   ["Open",            "Öffnen"],
+  min:        ["min",             "min"],
+  hrs:        ["h",               "h"],
   since:      ["left",            "ab vor"],
   justnow:    ["just now",        "gerade eben"],
   ago:        ["",                "vor "],
@@ -87,10 +93,62 @@ var WMO_TXT = [
 ];
 
 var s_lang = 0;   // von der Uhr gesetzt, 0 = Englisch
+// Was die letzte Auffrischung an Aenderungen ergab. Wird EINMAL mit der
+// naechsten Statusseite zur Uhr geschickt und dabei geleert - sonst meldete
+// jeder Seitenwechsel dieselbe Aenderung noch einmal.
+var s_changes = [];
 function T(id) { var r = TXT[id]; return r ? (r[s_lang] || r[0]) : ""; }
 
+// Holt die Aenderungen ab UND leert sie dabei: sie sollen genau einmal ueber
+// die Leitung gehen, sonst meldete jeder Seitenwechsel dieselbe Aenderung
+// noch einmal.
+function takeChanges() {
+  var t = s_changes.join(', ');
+  s_changes = [];
+  return t;
+}
+
 var QUOTA_LIMIT = 100;                 // Gratistarif AviationStack
-var PAGE_COUNT = 5;   // Flugzeugseite entfallen: am Gate unnuetze Auskunft
+var PAGE_COUNT = 5;
+
+// ---- Timeline ------------------------------------------------------------
+// Derselbe Weg wie bei Drinktervall und ChronoKit, die beide auf der echten
+// Uhr laufen: REST mit dem Token aus Pebble.getTimelineToken, die lokale
+// Schnittstelle nur als Rueckfall. Der tote Host getpebble.com wird nicht
+// benutzt.
+var TIMELINE_API = 'https://timeline-api.rebble.io/v1/user/pins/';
+var PIN_STORE = 'flynformer_pins';
+var PIN_VERSION = 1;          // erhoehen, wenn sich das AUSSEHEN aendert
+var LAUNCH_OPEN = 1;
+
+// Nur Namen aus dem System-Satz erreichen die echte Uhr. app://-Symbole nicht:
+// die Telefon-App setzt das Symbol ueber eine feste Tabelle, die ausschliesslich
+// system://images/... kennt, und laesst alles andere stillschweigend weg - die
+// Uhr zeichnet dann ihre Standardflagge.
+var PIN_ICON = 'system://images/SCHEDULED_FLIGHT';
+var PIN_BG = '#FFAA00';
+var PIN_FG = '#000000';
+
+// Erinnerungen vor dem Abflug. Sie vibrieren VON SELBST, ohne dass die App
+// laeuft - das ist der eigentliche Grund, warum die Pins mehr wert sind als
+// jedes Pollen. Hoechstens drei erlaubt das Schema.
+var REMIND_BEFORE_MIN = [120, 30];
+
+// ---- Weckplan ------------------------------------------------------------
+// Geweckt wird nur NAHE AM ABFLUG. Jedes Wecken startet die App im Vordergrund
+// (einen stillen Hintergrundlauf gibt es auf Pebble nicht) und kostet eine der
+// 100 Monatsabfragen. Darum so spaet wie moeglich und so selten wie noetig:
+//
+//   mehr als 3 h vorher   gar nicht - erst zum Beginn des Fensters
+//   3 h bis 1 h vorher    stuendlich
+//   letzte Stunde         alle 20 Minuten
+//   nach dem Abflug       einmal zur Landung, dann Schluss
+//
+// Das sind rund acht Abrufe je Flug, also gut zwoelf Fluege im Monat.
+var WAKE_LEAD_MS  = 3 * 3600000;
+var WAKE_CLOSE_MS = 1 * 3600000;
+var WAKE_STEP_FAR_MS = 3600000;
+var WAKE_STEP_NEAR_MS = 20 * 60000;   // Flugzeugseite entfallen: am Gate unnuetze Auskunft
 
 // ---- Flugphasen -----------------------------------------------------------
 // Der Statusschirm der Uhr zeigt nur, was in der laufenden Phase zaehlt. Die
@@ -326,6 +384,11 @@ function refresh(code, done) {
 
   fetchStatus(code, function (av, err) {
     if (err) { done(err); return; }
+    // Die EINZIGE Stelle, an der alter und neuer Datensatz gleichzeitig da
+    // sind. Danach ist der alte weg, und ein Vergleich waere nicht mehr
+    // moeglich. Verglichen wird erst in step3, wenn die Zeitversaetze stehen -
+    // ohne sie waere jede Zeitaenderung falsch gerechnet.
+    var prev = rec.av;
     rec.av = av;
     rec.at = Date.now();
 
@@ -358,8 +421,15 @@ function refresh(code, done) {
             c: w.dest.current.weather_code
           };
         }
+        // Jetzt stehen die Versaetze, also kann verglichen werden.
+        var changes = diffFlight(prev, av, rec.oOff || 0, rec.dOff || 0);
+        s_changes = changes;
         cache[code] = rec;
         save(S_CACHE, cache);
+        // Der Pin geht in die Timeline. Traegt er eine Aenderung, meldet sich
+        // die Uhr von selbst - auch wenn die App laengst wieder zu ist.
+        try { pushPin(code, av, rec.oOff || 0, rec.dOff || 0, changes); }
+        catch (e) { console.log('timeline: ' + e); }
         done(null);
       });
     }
@@ -380,7 +450,7 @@ function buildPage(code, page) {
     L[0] = code || T('no_flight');
     L[1] = T('no_data');
     L[2] = T('press');
-    return { lines: L, phase: PH_OFF, progress: 0 };
+    return { lines: L, phase: PH_OFF, progress: 0, wake: 0, change: '' };
   }
   var av = rec.av, dep = av.departure || {}, arr = av.arrival || {};
   // Echte Versaetze aus dem Wetterabruf; ohne sie wird nur gerechnet, nicht
@@ -455,7 +525,9 @@ function buildPage(code, page) {
       L[2] = depAt + delayTag;
       L[3] = gateLine;
     }
-    return { lines: L, phase: ph.phase, progress: ph.progress };
+    return { lines: L, phase: ph.phase, progress: ph.progress,
+             wake: s.watch === false ? 0 : nextWakeAt(ph, Date.now()),
+             change: takeChanges() };
   } else if (page === 1) {
     L[0] = T('dep') + ' ' + (dep.iata || '');
     L[1] = T('sched') + ' ' + hhmm(dep.scheduled) +
@@ -501,7 +573,9 @@ function buildPage(code, page) {
     }
     if (rt2 && rt2.dCity) L[4] = rt2.dCity;
   }
-  return { lines: L, phase: PH_OFF, progress: 0 };
+  // Nebenseiten planen keinen Weckruf - das tut nur die Statusseite, sonst
+  // ueberschriebe ein Blaettern den Plan mit einer Null.
+  return { lines: L, phase: PH_OFF, progress: 0, wake: -1, change: '' };
 }
 
 function ageText(code) {
@@ -511,6 +585,222 @@ function ageText(code) {
   if (min < 1) return T('justnow');
   if (min < 60) return T('ago') + min + ' min' + T('agosuffix');
   return T('ago') + dur(min) + T('agosuffix');
+}
+
+// ---------------------------------------------------------------- Timeline --
+
+function pinStore() {
+  try { return JSON.parse(localStorage.getItem(PIN_STORE)) || {}; } catch (e) { return {}; }
+}
+function pinStoreSave(o) {
+  try { localStorage.setItem(PIN_STORE, JSON.stringify(o)); } catch (e) {}
+}
+
+// Die Kennung ist FEST, nicht zufaellig: derselbe Flug am selben Tag bekommt
+// immer dieselbe, und ein erneutes PUT ueberschreibt den Pin, statt einen
+// zweiten anzulegen. Der Flugtag gehoert hinein, sonst liefe der Pin von
+// gestern in den von heute.
+function pinId(code, av) {
+  var day = String((av && av.flight_date) || '').replace(/-/g, '');
+  return 'flynformer-' + String(code || '').toLowerCase() + '-' + (day || 'x');
+}
+
+function isoOf(ms) { return new Date(ms).toISOString(); }
+
+// Was sich geaendert hat, in kurzen Saetzen. Leere Liste heisst: nichts
+// Meldenswertes. Countdown und Fortschritt stehen bewusst NICHT drin - die
+// aendern sich bei jedem Abruf und waeren keine Nachricht, sondern Laerm.
+function diffFlight(prev, av, oOff, dOff) {
+  var out = [];
+  if (!prev || !av) return out;
+  // Verschiedene Flugtage sind kein Wechsel, sondern ein anderer Flug.
+  if (prev.flight_date && av.flight_date && prev.flight_date !== av.flight_date) return out;
+
+  var pd = prev.departure || {}, nd = av.departure || {};
+  var pa = prev.arrival || {}, na = av.arrival || {};
+
+  if (prev.flight_status !== av.flight_status && av.flight_status) {
+    var st = STATUS_TXT[av.flight_status];
+    out.push(st ? (st[s_lang] || st[0]) : av.flight_status);
+  }
+  if (nd.gate && nd.gate !== pd.gate) {
+    out.push(T('gate') + ' ' + nd.gate + (pd.gate ? ' (' + T('was') + ' ' + pd.gate + ')' : ''));
+  }
+  if (nd.terminal && nd.terminal !== pd.terminal) {
+    out.push(T('terminal') + ' ' + nd.terminal + (pd.terminal ? ' (' + T('was') + ' ' + pd.terminal + ')' : ''));
+  }
+  if (na.gate && na.gate !== pa.gate) {
+    out.push(T('arr') + ' ' + T('gate') + ' ' + na.gate);
+  }
+  if (na.baggage && na.baggage !== pa.baggage) {
+    out.push(T('belt') + ' ' + na.baggage);
+  }
+  // Zeiten erst ab fuenf Minuten. Eine Minute hin oder her ist Rauschen im
+  // Datenbestand, keine Auskunft.
+  function shifted(o, n, off, label) {
+    var a = utcOf(o.actual || o.estimated || o.scheduled, off);
+    var b = utcOf(n.actual || n.estimated || n.scheduled, off);
+    if (isNaN(a) || isNaN(b)) return;
+    if (Math.abs(b - a) < 5 * 60000) return;
+    out.push(label + ' ' + hhmm(n.actual || n.estimated || n.scheduled));
+  }
+  shifted(pd, nd, oOff, T('dshort'));
+  shifted(pa, na, dOff, T('ashort'));
+  return out;
+}
+
+// Die naechste Weckzeit in Sekunden seit 1970, oder 0 fuer "nicht mehr wecken".
+function nextWakeAt(ph, now) {
+  if (!ph || isNaN(ph.d)) return 0;
+  var d = ph.d, a = ph.a;
+  if (!isNaN(a) && now >= a) return 0;                  // gelandet, fertig
+  if (now < d - WAKE_LEAD_MS) return Math.floor((d - WAKE_LEAD_MS) / 1000);
+  if (now < d - WAKE_CLOSE_MS) {
+    var t = now + WAKE_STEP_FAR_MS;
+    if (t > d - WAKE_CLOSE_MS) t = d - WAKE_CLOSE_MS;
+    return Math.floor(t / 1000);
+  }
+  if (now < d) {
+    var t2 = now + WAKE_STEP_NEAR_MS;
+    if (t2 > d) t2 = d;
+    return Math.floor(t2 / 1000);
+  }
+  if (!isNaN(a)) return Math.floor(a / 1000);           // einmal zur Landung
+  return 0;
+}
+
+function buildFlightPin(code, av, oOff, dOff, changes, isNew) {
+  var dep = av.departure || {}, arr = av.arrival || {};
+  var d = utcOf(dep.actual || dep.estimated || dep.scheduled, oOff);
+  if (isNaN(d)) return null;
+  var route = (dep.iata || '???') + ' → ' + (arr.iata || '???');
+  var gate = ((dep.terminal ? T('terminal') + ' ' + dep.terminal : '') +
+              (dep.terminal && dep.gate ? '  ' : '') +
+              (dep.gate ? T('gate') + ' ' + dep.gate : '')).trim();
+  var body = T('dshort') + ' ' + hhmm(dep.actual || dep.estimated || dep.scheduled) +
+             '   ' + T('ashort') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
+  var delay = arr.delay || dep.delay;
+  if (delay) body += '\n' + T('delay') + ' ' + delay + ' min';
+
+  var sub = gate;
+  if (!sub) {
+    var s0 = STATUS_TXT[av.flight_status];
+    sub = s0 ? (s0[s_lang] || s0[0]) : '';
+  }
+
+  var pin = {
+    id: pinId(code, av),
+    time: isoOf(d),
+    layout: {
+      type: 'genericPin',
+      title: String(code) + '  ' + route,
+      subtitle: sub,
+      tinyIcon: PIN_ICON,
+      backgroundColor: PIN_BG,
+      foregroundColor: PIN_FG,
+      body: body
+    },
+    actions: [{ title: T('open_app'), type: 'openWatchApp', launchCode: LAUNCH_OPEN }]
+  };
+
+  // Erinnerungen: nur solche, die noch in der Zukunft liegen. Sie vibrieren VON
+  // SELBST, ohne dass die App laeuft - das ist der eigentliche Gewinn der Pins.
+  var now = Date.now();
+  var rem = [];
+  REMIND_BEFORE_MIN.forEach(function (m) {
+    var t = d - m * 60000;
+    if (t <= now) return;
+    var wie = (m >= 60) ? ((m / 60) + ' ' + T('hrs')) : (m + ' ' + T('min'));
+    rem.push({
+      time: isoOf(t),
+      layout: {
+        type: 'genericReminder',
+        title: String(code) + '  ' + T('inn') + ' ' + wie,
+        tinyIcon: PIN_ICON,
+        body: (gate ? gate + '\n' : '') + route
+      }
+    });
+  });
+  if (rem.length) pin.reminders = rem;
+
+  if (isNew) {
+    pin.createNotification = {
+      layout: {
+        type: 'genericNotification',
+        title: String(code) + '  ' + T('newflight'),
+        tinyIcon: PIN_ICON,
+        body: route + '   ' + body.split('\n')[0]
+      }
+    };
+  }
+  // DAS ist die Benachrichtigung bei Aenderungen, und sie kommt ohne laufende
+  // App an: die Uhr meldet sich, sobald der geaenderte Pin eintrifft.
+  if (changes && changes.length) {
+    pin.updateNotification = {
+      time: isoOf(now),
+      layout: {
+        type: 'genericNotification',
+        title: String(code) + '  ' + T('changed'),
+        tinyIcon: PIN_ICON,
+        body: changes.join('\n')
+      }
+    };
+  }
+  return pin;
+}
+
+function pinViaRest(pin, token, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.onload = function () { cb(this.status >= 200 && this.status < 300, 'REST ' + this.status); };
+  xhr.onerror = function () { cb(false, 'REST Netzwerkfehler'); };
+  xhr.open('PUT', TIMELINE_API + pin.id);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.setRequestHeader('X-User-Token', '' + token);
+  xhr.send(JSON.stringify(pin));
+}
+
+function pinViaLocal(pin, cb) {
+  try {
+    if (Pebble.insertTimelinePin.length >= 3) {
+      Pebble.insertTimelinePin(pin, function () { cb(true, 'lokal'); },
+                               function (e) { cb(false, 'lokal ' + e); });
+    } else {
+      Pebble.insertTimelinePin(pin);
+      cb(true, 'lokal synchron');
+    }
+  } catch (e) { cb(false, 'lokal ' + e); }
+}
+
+// Pin nur senden, wenn sich sein INHALT geaendert hat. Ohne diese Sperre ginge
+// bei jeder Auffrischung derselbe Pin erneut hinaus - und mit ihm jedes Mal die
+// Aenderungsmeldung, obwohl sich nichts geaendert hat.
+function pushPin(code, av, oOff, dOff, changes) {
+  if (!av) return;
+  var store = pinStore();
+  var id = pinId(code, av);
+  var had = store[id];
+  var pin = buildFlightPin(code, av, oOff, dOff, changes, !had);
+  if (!pin) return;
+  var sig = JSON.stringify([pin.time, pin.layout.subtitle, pin.layout.body, PIN_VERSION]);
+  if (had && had.sig === sig && !(changes && changes.length)) return;
+
+  function done(ok, how) {
+    console.log('timeline: ' + id + ' ' + (ok ? 'gesendet' : 'FEHLGESCHLAGEN') + ' (' + how + ')');
+    if (!ok) return;
+    store[id] = { sig: sig, sentAt: Date.now() };
+    pinStoreSave(store);
+  }
+  if (typeof Pebble.getTimelineToken !== 'function') {
+    if (typeof Pebble.insertTimelinePin === 'function') pinViaLocal(pin, done);
+    else console.log('timeline: kein Weg zur Timeline');
+    return;
+  }
+  Pebble.getTimelineToken(function (token) {
+    pinViaRest(pin, token, done);
+  }, function (err) {
+    console.log('timeline: kein Token (' + err + ')');
+    if (typeof Pebble.insertTimelinePin === 'function') pinViaLocal(pin, done);
+  });
 }
 
 function sendPage(code, page) {
@@ -523,6 +813,13 @@ function sendPage(code, page) {
     // Die Uhr waehlt danach die Ueberschrift und zeichnet den Balken.
     PHASE: b.phase,
     PROGRESS: b.progress,
+    // Wann die Uhr sich das naechste Mal selbst wecken soll, in Sekunden seit
+    // 1970. 0 heisst: nicht mehr wecken, -1 heisst: Plan unveraendert lassen.
+    // Rechnen muss das die Telefonseite, weil nur sie die echten Zeitzonen
+    // beider Flughaefen kennt.
+    NEXT_WAKE: b.wake,
+    // Leer, wenn sich nichts geaendert hat.
+    CHANGE: b.change,
     AGE: ageText(code),
     QUOTA: q.used + ' / ' + QUOTA_LIMIT,
     // Zu welchem Flug diese Antwort gehoert. Die Uhr wirft sie weg, wenn die
@@ -567,6 +864,10 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var s = settings();
   if (dict.API_KEY !== undefined) s.key = String(dict.API_KEY.value || '').trim();
   if (dict.UNITS !== undefined) s.units = String(dict.UNITS.value || 'metric');
+  // Selbstwecken. Aus heisst: die Uhr sieht nur nach, wenn du die App oeffnest.
+  // Die Pins und ihre Erinnerungen bleiben davon unberuehrt - die brauchen kein
+  // Wecken, sie liegen schon in der Timeline.
+  if (dict.WATCH_FLIGHT !== undefined) s.watch = !!dict.WATCH_FLIGHT.value;
   // Die Flugnummer steht bewusst NICHT mehr hier: sie wird auf der Uhr
   // eingegeben und mit jeder Anfrage mitgeschickt.
   // Der Zaehler wird nur beim UMLEGEN des Schalters zurueckgesetzt, nicht bei

@@ -1,7 +1,7 @@
 {
   "name": "flynformer",
   "author": "dysseus-pascal",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "keywords": [
     "pebble-app"
   ],
@@ -32,6 +32,8 @@
       "PAGE",
       "PHASE",
       "PROGRESS",
+      "NEXT_WAKE",
+      "CHANGE",
       "L1",
       "L2",
       "L3",
@@ -45,7 +47,8 @@
       "LANG",
       "API_KEY",
       "UNITS",
-      "QUOTA_RESET"
+      "QUOTA_RESET",
+      "WATCH_FLIGHT"
     ],
     "resources": {
       "media": []

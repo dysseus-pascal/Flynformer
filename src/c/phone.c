@@ -20,6 +20,7 @@ typedef struct {
 static FnPage s_page;
 static FnPhoneUpdate s_on_update;
 static char s_code[12];
+static int32_t s_next_wake = -1;   // -1 = das Telefon hat nichts gesagt
 
 // Der Postausgang fasst genau EINE Nachricht. Zwei Anfragen kurz nacheinander -
 // beim Start der gespeicherte Stand und gleich darauf die Auffrischung, oder
@@ -48,6 +49,8 @@ static uint8_t s_tries;
 const FnPage *phone_page(void) { return &s_page; }
 
 const char *phone_code(void) { return s_code; }
+
+int32_t phone_next_wake(void) { return s_next_wake; }
 
 void phone_set_code(const char *code) {
   if (!code) return;
@@ -144,6 +147,12 @@ static void prv_inbox(DictionaryIterator *iter, void *context) {
   s_page.progress = pr ? (int)pr->value->int32 : 0;
   if (s_page.progress < 0) s_page.progress = 0;
   if (s_page.progress > 100) s_page.progress = 100;
+  // Weckzeit und Aenderungstext. Nebenseiten schicken -1 und lassen den
+  // Weckplan damit unangetastet - sonst loeschte blosses Blaettern den Wecker.
+  const Tuple *nw = dict_find(iter, MESSAGE_KEY_NEXT_WAKE);
+  if (nw) s_next_wake = nw->value->int32;
+  s_page.change[0] = '\0';
+  prv_copy(s_page.change, sizeof(s_page.change), dict_find(iter, MESSAGE_KEY_CHANGE));
   prv_copy(s_page.age, sizeof(s_page.age), dict_find(iter, MESSAGE_KEY_AGE));
   prv_copy(s_page.quota, sizeof(s_page.quota), dict_find(iter, MESSAGE_KEY_QUOTA));
   // fno wird NICHT aus der Nachricht uebernommen: die Flugnummer gehoert seit

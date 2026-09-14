@@ -34,6 +34,7 @@ typedef struct {
   int  page;
   int  phase;                 // FnPhase, nur auf Seite 0 von Belang
   int  progress;              // 0..100, nur in FN_PHASE_ENROUTE
+  char change[FN_LINE_LEN];   // was sich seit dem letzten Abruf geaendert hat
   bool fresh;                 // true = gerade vom Telefon, false = gespeichert
 } FnPage;
 
@@ -56,3 +57,7 @@ void phone_request_page(int page);
 void phone_refresh(int page);
 
 const FnPage *phone_page(void);
+
+// Weckzeit, die das Telefon zuletzt geschickt hat: Unixzeit in Sekunden,
+// 0 = nicht mehr wecken, -1 = nichts gesagt (Plan unveraendert lassen).
+int32_t phone_next_wake(void);
