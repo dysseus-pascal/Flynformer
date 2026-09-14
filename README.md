@@ -153,9 +153,19 @@ sonst läge er in diesem öffentlichen Repository für jeden lesbar.
 einer Eingabe und beim Aktualisieren. Kommen die Daten früher an, fliegt er
 trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
 
-Der Weg ist ein **Bogen**: das Flugzeug taucht als Punkt am oberen Rand auf,
-wächst gleichmässig, zieht dabei nach unten durch die Bildmitte und steigt gross
-wieder nach oben aus dem Bild — so, wie eine Maschine über einen hinwegzieht.
+Der Weg ist ein **Bogen**: Flyn taucht als Punkt am oberen Rand auf, wächst
+gleichmässig, zieht nach unten durch die Bildmitte und verlässt das Bild zuletzt
+oben **rechts** — dabei legt er sich in die Kurve, bis zu 28 Grad. Die Drift zur
+Seite hängt an `u⁴`, bleibt also lange bei null und schwenkt erst zum Schluss;
+mit einer flacheren Kurve zöge er schon durch die Bildmitte zur Seite, statt sie
+zu treffen.
+
+Hinter ihm eine **Staubfahne**. Die Wölkchen werden nicht geschätzt: für jedes
+wird dieselbe Bahnformel mit einem früheren Zeitpunkt gerechnet, sie sitzen also
+genau dort, wo Flyn vorhin war. Ihr Radius hängt an seiner damaligen Grösse und
+schrumpft mit dem Alter — ausblenden kann die Uhr nicht, es gibt keine
+Halbtransparenz. Sichtbar wird die Fahne erst im letzten Drittel, und das ist
+richtig so: solange Flyn frontal auf einen zukommt, liegt seine Spur hinter ihm.
 Als Formel `y = h · (2,9u − 3,8u²)`, mit `u` als Fortschritt von 0 bis 1: bei
 `u = 0` am oberen Rand, bei `u = 0,38` am tiefsten Punkt knapp unter der Mitte,
 bei `u = 1` knapp eine Bildhöhe darüber. Die Grösse wächst gleichmässig durch,

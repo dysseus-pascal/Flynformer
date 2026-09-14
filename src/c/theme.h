@@ -32,6 +32,11 @@
 #define FN_COLOR_PLANE_FILL  GColorWhite
 #define FN_COLOR_PLANE_LINE  GColorBlack
 #define FN_COLOR_PLANE_HOLE  GColorBlack
+// Die Staubwolken hinter Flyn. In Farbe ein weicheres Orange, damit sie sich
+// vom Feld abheben, ohne zu schreien; auf S/W bleibt nur Weiss - dort sind sie
+// dieselbe Farbe wie Flyn und lesen sich trotzdem als Fahne, weil sie von ihm
+// abgeloest liegen.
+#define FN_COLOR_PLANE_DUST  PBL_IF_COLOR_ELSE(GColorMelon, GColorWhite)
 
 // Masse je Plattform.
 //

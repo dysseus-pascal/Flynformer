@@ -26,9 +26,15 @@
 //   ein flaches, weites Laecheln nach dem Vorbild des Glases aus Drinktervall.
 //   Das ist der Unterschied zwischen Flugzeug und Zeichentrickflugzeug.
 //
-// DER ANFLUG IST EIN BOGEN. Das Flugzeug taucht als Punkt am oberen Rand auf,
-// waechst gleichmaessig, zieht nach unten durch die Bildmitte und steigt gross
-// wieder nach oben aus dem Bild. Die Formel steht in plane_fx_draw_frame.
+// DER ANFLUG IST EIN BOGEN. Flyn taucht als Punkt am oberen Rand auf, waechst
+// gleichmaessig, zieht nach unten durch die Bildmitte und verlaesst das Bild
+// zuletzt oben RECHTS - dabei legt er sich in die Kurve. Die Formeln stehen in
+// prv_pose.
+//
+// HINTER IHM EINE STAUBFAHNE. Sie wird nicht geraten: die Woelkchen sitzen dort,
+// wo Flyn vorhin WAR. Dieselbe Bahnformel, nur mit einem frueheren Zeitpunkt
+// gerechnet - damit stimmt die Fahne auch dann, wenn sich die Bahn spaeter
+// aendert.
 //
 // ZEICHENREIHENFOLGE: von hinten nach vorn. Leitwerk, Fluegel, Pylone und
 // Gondeln, dann der Rumpf darueber - so laeuft seine Kontur sauber vor den
@@ -98,24 +104,91 @@ static const PPoint s_mouth[] = {
 // und der Anflug beginnt bei wenigen Pixeln.
 #define DETAIL_MIN 70
 
+// Seitwaerts aus dem Bild: bei u = 1 liegt die Mitte eine ganze Bildbreite
+// rechts von der Schirmmitte. Die Drift haengt an u hoch VIER, bleibt also
+// lange bei null und schwenkt erst zum Schluss - sonst zoege Flyn schon durch
+// die Bildmitte nach rechts, statt sie zu treffen.
+#define DRIFT_W   100     // Prozent der Bildbreite bei u = 1
+
+// Schraeglage, Grad bei u = 1. Sie folgt derselben spaeten Kurve wie die Drift:
+// Flyn legt sich genau dann in die Kurve, wenn er sie auch fliegt.
+#define TILT_DEG   28
+
+// Staubfahne: sieben Woelkchen, je ein Sechzehntel der Laufzeit zurueck.
+//
+// Sichtbar wird sie erst im letzten Drittel, und das ist richtig so: solange
+// Flyn frontal auf einen zukommt, liegt seine Spur hinter ihm und damit unter
+// ihm. Erst wenn er nach rechts oben wegzieht, kommt sie frei.
+#define DUST_N     6
+#define DUST_STEP  (ANIMATION_NORMALIZED_MAX / 11)
+#define DUST_R     10     // Radius in Prozent der damaligen Flugzeuggroesse
+
 static Animation *s_anim;
 static Layer *s_layer;
 static PlaneFxDone s_done;
 static int32_t s_progress;   // 0 .. ANIMATION_NORMALIZED_MAX
 
-static int16_t prv_map(int16_t center, int v, int16_t size) {
-  return (int16_t)(center + ((int32_t)v - GRID / 2) * size / GRID);
+// Wo Flyn zu einem Zeitpunkt steht, wie gross er ist und wie schief er liegt.
+// Einmal geschrieben, zweimal gebraucht: fuer ihn selbst und fuer jedes
+// Staubwoelkchen mit einem frueheren Zeitpunkt.
+typedef struct {
+  int16_t cx, cy, size;
+  int32_t angle;          // Pebble-Winkel, TRIG_MAX_ANGLE = voller Kreis
+} FxPose;
+
+// Die Bahn, in Worten:
+//
+//   Groesse   waechst GLEICHMAESSIG von einem Punkt auf gut das Dreifache der
+//             Bildbreite. Keine Beschleunigung - das Ruhige an der Bewegung ist
+//             das Wachsen, die Kurve macht der Weg.
+//
+//   Hoehe     y = h * (2,9u - 3,8u^2), also ein Bogen:
+//               u = 0     oberer Rand, Flyn ist dort ein Punkt
+//               u = 0,38  tiefster Punkt, knapp unter der Bildmitte
+//               u = 0,5   genau die Bildmitte, schon auf dem Weg nach oben
+//               u = 1     0,9 Bildhoehen darueber, alles draussen
+//
+//   Seite     x = w/2 + w * u^4. Die vierte Potenz haelt Flyn lange in der
+//             Mitte und schwenkt ihn erst zum Schluss nach rechts - mit einer
+//             flacheren Kurve zoege er schon durch die Bildmitte zur Seite,
+//             statt sie zu treffen.
+//
+//   Neigung   folgt derselben spaeten Kurve: er legt sich genau dann in die
+//             Kurve, wenn er sie auch fliegt.
+static FxPose prv_pose(int32_t p, GRect bounds) {
+  const int32_t pmax = ANIMATION_NORMALIZED_MAX;
+  const int32_t w = bounds.size.w, h = bounds.size.h;
+  if (p < 0) p = 0;
+
+  const int32_t sq = (p * p) / pmax;          // u^2 * pmax
+  // In Prozent rechnen, damit u hoch vier nicht ueberlaeuft: sq * sq waere
+  // bei vollem Fortschritt rund 4,3 Milliarden und passt in kein int32.
+  const int32_t u2 = (sq * 100) / pmax;       // 0..100
+  const int32_t u4 = (u2 * u2) / 100;         // 0..100
+
+  FxPose o;
+  o.size  = (int16_t)(w * (2 + (300 * p) / pmax) / 100);
+  o.cx    = (int16_t)(w / 2 + (w * DRIFT_W * u4) / 10000);
+  o.cy    = (int16_t)((h * ((290 * p - 380 * sq) / pmax)) / 100);
+  o.angle = (TRIG_MAX_ANGLE * TILT_DEG / 360) * u4 / 100;
+  return o;
+}
+
+// Rasterpunkt in Bildschirmkoordinaten, um die Flugzeugmitte gedreht.
+static GPoint prv_pt(const FxPose *o, int gx, int gy) {
+  const int32_t dx = ((int32_t)gx - GRID / 2) * o->size / GRID;
+  const int32_t dy = ((int32_t)gy - GRID / 2) * o->size / GRID;
+  if (o->angle == 0) return GPoint(o->cx + dx, o->cy + dy);
+  const int32_t cs = cos_lookup(o->angle), sn = sin_lookup(o->angle);
+  return GPoint((int16_t)(o->cx + (dx * cs - dy * sn) / TRIG_MAX_RATIO),
+                (int16_t)(o->cy + (dx * sn + dy * cs) / TRIG_MAX_RATIO));
 }
 
 static void prv_poly(GContext *ctx, const PPoint *pts, unsigned n,
-                     int16_t cx, int16_t cy, int16_t size,
-                     GColor fill, bool outline, uint8_t stroke) {
+                     const FxPose *o, GColor fill, bool outline, uint8_t stroke) {
   GPoint buf[MAX_PTS];
   if (n > MAX_PTS) n = MAX_PTS;
-  for (unsigned i = 0; i < n; i++) {
-    buf[i].x = prv_map(cx, pts[i].x, size);
-    buf[i].y = prv_map(cy, pts[i].y, size);
-  }
+  for (unsigned i = 0; i < n; i++) buf[i] = prv_pt(o, pts[i].x, pts[i].y);
   GPathInfo info = { .num_points = n, .points = buf };
   GPath *p = gpath_create(&info);
   if (!p) return;
@@ -130,11 +203,11 @@ static void prv_poly(GContext *ctx, const PPoint *pts, unsigned n,
 }
 
 #define POLY(arr, col, out) \
-  prv_poly(ctx, arr, ARRAY_LENGTH(arr), cx, cy, size, col, out, stroke)
+  prv_poly(ctx, arr, ARRAY_LENGTH(arr), o, col, out, stroke)
 
-void plane_fx_draw(GContext *ctx, GPoint center, int16_t size) {
+static void prv_plane(GContext *ctx, const FxPose *o) {
+  const int16_t size = o->size;
   if (size < 5) return;
-  const int16_t cx = center.x, cy = center.y;
   // Strichstaerke rund 3,5 % der Groesse, mindestens 1 und immer ungerade -
   // graphics_context_set_stroke_width zeichnet nur ungerade Breiten mittig.
   const uint8_t stroke = (uint8_t)((size / 28) | 1);
@@ -150,8 +223,7 @@ void plane_fx_draw(GContext *ctx, GPoint center, int16_t size) {
   const int16_t r = (int16_t)(((int32_t)ENG_R * size) / GRID);
   if (r >= 2) {
     for (int s = -1; s <= 1; s += 2) {
-      const GPoint c = GPoint(prv_map(cx, 50 + s * ENG_DX, size),
-                              prv_map(cy, ENG_Y, size));
+      const GPoint c = prv_pt(o, 50 + s * ENG_DX, ENG_Y);
       graphics_context_set_fill_color(ctx, FN_COLOR_PLANE_FILL);
       graphics_fill_circle(ctx, c, r);
       graphics_context_set_stroke_color(ctx, FN_COLOR_PLANE_LINE);
@@ -183,35 +255,31 @@ bool plane_fx_is_playing(void) {
 
 void plane_fx_draw_frame(GContext *ctx, GRect bounds) {
   if (!s_anim) return;
-  const int32_t p = s_progress;                    // 0 .. 65536
-  const int32_t pmax = ANIMATION_NORMALIZED_MAX;
-  const int32_t h = bounds.size.h;
 
-  // Die Groesse waechst GLEICHMAESSIG durch, von einem Punkt auf gut das
-  // Dreifache der Bildbreite. Keine Beschleunigung: das Ruhige an der Bewegung
-  // ist das Wachsen, die Kurve macht der Weg.
-  const int16_t size = (int16_t)((int32_t)bounds.size.w * (2 + (300 * p) / pmax) / 100);
+  // ZUERST DIE STAUBFAHNE, damit Flyn darueber liegt.
+  //
+  // Die Woelkchen werden nicht geschaetzt: fuer jedes wird dieselbe Bahnformel
+  // mit einem frueheren Zeitpunkt gerechnet. Sie sitzen also genau dort, wo
+  // Flyn vorhin war - und bleiben richtig, wenn sich die Bahn einmal aendert.
+  // Ihr Radius haengt an seiner damaligen Groesse und schrumpft mit dem Alter,
+  // denn ausblenden kann die Uhr nicht: es gibt keine Halbtransparenz.
+  graphics_context_set_fill_color(ctx, FN_COLOR_PLANE_DUST);
+  for (int i = DUST_N; i >= 1; i--) {
+    const int32_t pk = s_progress - (int32_t)i * DUST_STEP;
+    if (pk <= 0) continue;
+    const FxPose d = prv_pose(pk, bounds);
+    // Deutlich schrumpfend, und die Woelkchen liegen weit auseinander. Sanfter
+    // geschrumpft ueberlappten sie einander zu einem einzigen Schmier - aus
+    // Wolken wurde ein Fleck.
+    const int16_t r = (int16_t)(((int32_t)d.size * DUST_R) / 100 / (i + 1));
+    if (r < 2) continue;
+    // Etwas unter die damalige Mitte: die Fahne haengt hinter und unter Flyn,
+    // nicht in seiner Flugbahn.
+    graphics_fill_circle(ctx, GPoint(d.cx, d.cy + d.size / 8), r);
+  }
 
-  // Der Weg ist ein Bogen:   y = h * (2,9u - 3,8u^2),   u = p / pmax
-  //
-  //   u = 0      y = 0         oberer Rand, das Flugzeug ist dort ein Punkt
-  //   u = 0,38   y = 0,55 h    tiefster Punkt, knapp unter der Bildmitte
-  //   u = 0,5    y = 0,50 h    genau die Bildmitte, schon auf dem Weg nach oben
-  //   u = 1      y = -0,90 h   darueber, alles draussen
-  //
-  // Der Hub ist auf 0,90 Bildhoehen zurueckgegangen, weil die Gondeln ohne
-  // Pylone hoeher sitzen: die Unterkante liegt bei 75 von 100 Rastereinheiten
-  // statt bei 87. Ein groesserer Hub waere nicht falsch, aber das Flugzeug
-  // waere dann schon fertig draussen, waehrend die Animation noch laeuft - und
-  // der Schirm stuende die letzte Zehntelsekunde leer.
-  //
-  // Gerechnet in zwei Schritten, sonst laeuft int32 ueber: erst der Faktor
-  // (-90 bis +55), dann erst die Bildhoehe.
-  const int32_t sq = (p * p) / pmax;
-  const int32_t k = (290 * p - 380 * sq) / pmax;
-  const int16_t cy = (int16_t)((h * k) / 100);
-
-  plane_fx_draw(ctx, GPoint(bounds.size.w / 2, cy), size);
+  const FxPose o = prv_pose(s_progress, bounds);
+  prv_plane(ctx, &o);
 }
 
 static void prv_setup(Animation *animation) { }
