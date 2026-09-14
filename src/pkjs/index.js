@@ -520,8 +520,12 @@ function buildPage(code, page) {
     }
     var now2 = new Date(Date.now() + dOff * 60000);
     L[3] = T('localtime') + ' ' + pad2(now2.getUTCHours()) + ':' + pad2(now2.getUTCMinutes());
-    var ag = place(arr.terminal, arr.gate);
-    L[4] = arr.baggage ? (T('belt') + ' ' + arr.baggage + (ag ? '  ' + ag : '')) : ag;
+    // Nach der Landung zaehlt das Gepaeckband. Das Ankunfts-Gate stand frueher
+    // daneben, aber dann wurde die Zeile auf flint abgeschnitten - und wo man
+    // ausgestiegen ist, weiss man ohnehin. Nur wenn kein Band bekannt ist,
+    // tritt das Gate an seine Stelle.
+    L[4] = arr.baggage ? (T('belt') + ' ' + arr.baggage)
+                       : place(arr.terminal, arr.gate);
   }
 
   return { lines: L, phase: ph.phase, progress: ph.progress,
