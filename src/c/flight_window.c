@@ -31,6 +31,7 @@ static bool s_intro;      // Anflug laeuft gerade
 static bool s_asked;      // Eingabe schon gezeigt (nicht in einer Schleife)
 static AppTimer *s_open_input;
 static bool s_woken;      // von einem Wakeup gestartet, nicht von Hand
+static bool s_jumped;     // schon auf die Phasenseite gesprungen
 static bool s_reported;   // Aenderung schon vibriert
 static AppTimer *s_bail;  // Notausgang, falls das Telefon nicht antwortet
 
@@ -50,13 +51,16 @@ static StringId prv_phase_name(int phase) {
   }
 }
 
-static StringId prv_page_name(int page, int phase) {
-  switch (page) {
-    case 0: return prv_phase_name(phase);
-    case 1: return STR_PAGE_TIMES;
-    case 2: return STR_PAGE_GATE;
-    case 3: return STR_PAGE_ROUTE;
-    default: return STR_PAGE_DEST;
+// Welche Seite gehoert zu welcher Phase? Danach oeffnet die App.
+static int prv_page_for_phase(int phase) {
+  switch (phase) {
+    case FN_PHASE_PLANNED:
+    case FN_PHASE_BOARDING: return 0;   // vor dem Flug
+    case FN_PHASE_DEPARTED:
+    case FN_PHASE_ENROUTE:  return 1;   // im Flug
+    case FN_PHASE_APPROACH:
+    case FN_PHASE_ARRIVED:  return 2;   // am Ziel
+    default:                return 0;
   }
 }
 
@@ -119,6 +123,12 @@ static void prv_update(Layer *layer, GContext *ctx) {
   // Waehrend des Anflugs nur das Flugzeug auf leerem Grund - er IST die
   // Ladeanzeige, also darf nichts Halbfertiges darunter durchscheinen.
   if (s_intro && plane_fx_is_playing()) {
+    // Flyn ist weiss, der Seitengrund auch - auf weissem Feld bliebe nur seine
+    // Kontur uebrig. Der Anflug laeuft deshalb auf einem Feld in der
+    // Akzentfarbe, und der Farbwechsel macht ihn zugleich als Ladeanzeige
+    // kenntlich.
+    graphics_context_set_fill_color(ctx, FN_COLOR_ACCENT);
+    graphics_fill_rect(ctx, b, 0, GCornerNone);
     plane_fx_draw_frame(ctx, b);
     return;
   }
@@ -130,13 +140,27 @@ static void prv_update(Layer *layer, GContext *ctx) {
   const int16_t cw = b.size.w - side;
   const GTextAlignment al = PBL_IF_RECT_ELSE(GTextAlignmentLeft, GTextAlignmentCenter);
 
+  // Das Band traegt EINE Zeile: links die Flugnummer, rechts die Phase. Zwei
+  // Zeilen kosteten die halbe Bandhoehe, und die Phase ist die nuetzlichere
+  // Auskunft - welche Seite man liest, sagen die Marken an der Seite.
   graphics_context_set_fill_color(ctx, FN_COLOR_ACCENT);
   graphics_fill_rect(ctx, GRect(0, 0, b.size.w, band), 0, GCornerNone);
   graphics_context_set_text_color(ctx, FN_COLOR_ON_ACCENT);
+#if PBL_RECT
+  // Eckiger Schirm: alles in eine Zeile, Nummer links, Phase rechts.
+  const int16_t band_y = (band - 22) / 2;
   prv_text(ctx, p->fno[0] ? p->fno : S(STR_NO_FLIGHT), F_FNO,
-           GRect(m, 2, b.size.w - m - 4, band / 2 + 6), al);
-  prv_text(ctx, S(prv_page_name(s_page, p->phase)), F_SUB,
-           GRect(m, band / 2 + 2, b.size.w - m - 4, band / 2), al);
+           GRect(m, band_y, b.size.w - 2 * m, band), GTextAlignmentLeft);
+  prv_text(ctx, S(prv_phase_name(p->phase)), F_SUB,
+           GRect(m, band_y + 4, b.size.w - m - 6, band), GTextAlignmentRight);
+#else
+  // Runder Schirm: nebeneinander wuerde der Kreis die Raender abschneiden,
+  // also untereinander und mittig. Darum bleibt das Band dort auch hoeher.
+  prv_text(ctx, p->fno[0] ? p->fno : S(STR_NO_FLIGHT), F_FNO,
+           GRect(m, 2, b.size.w - 2 * m, band / 2 + 6), GTextAlignmentCenter);
+  prv_text(ctx, S(prv_phase_name(p->phase)), F_SUB,
+           GRect(m, band / 2 + 1, b.size.w - 2 * m, band / 2), GTextAlignmentCenter);
+#endif
 
   graphics_context_set_fill_color(ctx, FN_COLOR_BG);
   graphics_fill_rect(ctx, GRect(0, band, b.size.w, 2), 0, GCornerNone);
@@ -157,7 +181,9 @@ static void prv_update(Layer *layer, GContext *ctx) {
   // Der Balken gehoert nur zur Statusseite und nur, solange der Flug wirklich
   // unterwegs ist. Am Gate ist ein Fortschritt von 0 % keine Auskunft, sondern
   // eine Irrefuehrung.
-  const bool show_bar = (s_page == 0 && p->phase == FN_PHASE_ENROUTE);
+  // Der Balken gehoert auf die Flugseite, und nur solange wirklich geflogen
+  // wird. Am Gate waere ein Fortschritt von 0 % keine Auskunft.
+  const bool show_bar = (s_page == 1 && p->phase == FN_PHASE_ENROUTE);
   for (int i = 0; i < 5; i++) {
     if (show_bar && i == 2) {
       prv_bar(ctx, GRect(m, y + 3, cw - m - 4, BAR_H), p->progress);
@@ -168,8 +194,8 @@ static void prv_update(Layer *layer, GContext *ctx) {
     // Seite, die je nach Flugphase anders aussieht, ist das gegenstandslos, und
     // die Luecken liessen den Schirm leerer wirken, als er ist.
     if (!p->line[i][0]) continue;
-    const bool big = (s_page == 0 && i == 1);
-    if (big) graphics_context_set_text_color(ctx, FN_COLOR_ACCENT);
+    const bool big = (i == 1);
+    if (big) graphics_context_set_text_color(ctx, FN_COLOR_BIG);
     prv_text(ctx, p->line[i], big ? FONT_KEY_GOTHIC_28_BOLD : F_LINE,
              GRect(m, y, cw - m - 4, big ? BIG_H + 6 : LINE_H + 4), al);
     if (big) graphics_context_set_text_color(ctx, FN_COLOR_TEXT);
@@ -180,7 +206,7 @@ static void prv_update(Layer *layer, GContext *ctx) {
   // Eine Aenderung verdraengt Alter und Kontingent und steht in der Akzentfarbe
   // da - sie ist der Grund, warum die Uhr ueberhaupt nachgesehen hat.
   if (p->change[0]) {
-    graphics_context_set_text_color(ctx, FN_COLOR_ACCENT);
+    graphics_context_set_text_color(ctx, FN_COLOR_BIG);
     prv_text(ctx, p->change, F_FOOT, GRect(m, fy, cw - m - 4, 16), al);
     return;
   }
@@ -206,6 +232,15 @@ static void prv_schedule_leave(uint32_t ms) {
 }
 
 static void prv_on_update(void) {
+  // Beim ersten frischen Stand auf die Seite springen, die zur Flugphase passt
+  // - einmal je App-Start. Wer danach blaettert, soll nicht zurueckgeworfen
+  // werden, sobald die naechste Antwort eintrifft.
+  const FnPage *pg = phone_page();
+  if (!s_jumped && pg->fresh && !s_woken) {
+    s_jumped = true;
+    const int want = prv_page_for_phase(pg->phase);
+    if (want != s_page) { s_page = want; phone_request_page(s_page); }
+  }
   if (s_canvas) layer_mark_dirty(s_canvas);
 
   // Das Telefon schickt die naechste Weckzeit mit. -1 heisst "nichts gesagt",
@@ -347,6 +382,7 @@ void flight_window_push(bool woken) {
   s_asked = false;
   s_woken = woken;
   s_reported = false;
+  s_jumped = false;
   s_window = window_create();
   window_set_background_color(s_window, FN_COLOR_BG);
   window_set_click_config_provider(s_window, prv_click_config);

@@ -126,7 +126,7 @@ function check(name, ok, detail) {
 
   // 3. Jede Seite danach ist kostenlos - eine Antwort traegt alle sechs.
   calls = []; sent = [];
-  for (let p = 0; p < 5; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: 1, CODE: 'LH400' } });
+  for (let p = 0; p < 3; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: 1, CODE: 'LH400' } });
   await wait(60);
   check('Blaettern kostet nichts', paid() === 0, paid() + ' bezahlte Abrufe beim Blaettern');
 
@@ -134,7 +134,7 @@ function check(name, ok, detail) {
   //    Uhr, um eine verspaetete Antwort des vorigen Fluges wegzuwerfen.
   const pages = sent.filter((d) => d.PAGE !== undefined);
   check('Jede Seite traegt ihre Flugnummer',
-        pages.length === 5 && pages.every((d) => d.FNO === 'LH400'),
+        pages.length === 3 && pages.every((d) => d.FNO === 'LH400'),
         'FNO fehlt oder falsch: ' + JSON.stringify(pages.map((d) => d.FNO)));
 
   // 5. Eine WIEDERHOLTE Bitte kostet ein zweites Mal. Die Telefonseite kann

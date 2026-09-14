@@ -457,125 +457,76 @@ function buildPage(code, page) {
   // angezeigt, also ist 0 als Rueckfall harmlos genug.
   var oOff = rec.oOff || 0, dOff = rec.dOff || 0;
 
+  // Drei Seiten, geordnet wie die Reise selbst. Vorher waren es fuenf, sortiert
+  // nach Datenquelle - das ist die Ordnung des Programmierers, nicht die des
+  // Reisenden.
+  var ph = phaseOf(av, oOff, dOff);
+  var route = (dep.iata || '???') + ' → ' + (arr.iata || '???');
+  var delay = arr.delay || dep.delay;
+  var delayTag = delay ? '  +' + delay : '';
+  var depAt = T('dshort') + ' ' + hhmm(dep.actual || dep.estimated || dep.scheduled);
+  var arrAt = T('ashort') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
+  // Countdowns nur, solange sie in der ZUKUNFT liegen. Ein abgelaufener zeigte
+  // sonst "in -22 h 46" - richtig gerechnet und trotzdem Unsinn.
+  var minDep = isNaN(ph.d) ? NaN : (ph.d - Date.now()) / 60000;
+  var minArr = isNaN(ph.a) ? NaN : (ph.a - Date.now()) / 60000;
+  var toDep = (!isNaN(minDep) && minDep > 0) ? dur(minDep) : '';
+  var toArr = (!isNaN(minArr) && minArr > 0) ? dur(minArr) : '';
+  // Die geplante Reisedauer - das, was auf der Flugseite gross dastehen soll,
+  // solange noch nicht geflogen wird.
+  var tsp = utcOf(dep.scheduled, oOff), tap = utcOf(arr.scheduled, dOff);
+  var travel = (!isNaN(tsp) && !isNaN(tap) && tap > tsp) ? dur((tap - tsp) / 60000) : '';
+
+  function place(t, g) {
+    return ((t ? T('terminal') + ' ' + t : '') + (t && g ? '  ' : '') +
+            (g ? T('gate') + ' ' + g : '')).trim();
+  }
+
   if (page === 0) {
-    // Der Statusschirm. Jede Phase bekommt genau die Zeilen, die in ihr etwas
-    // nuetzen - Zeile 2 ist die grosse, und in PH_ENROUTE zeichnet die Uhr
-    // zwischen Zeile 2 und 3 den Fortschrittsbalken.
-    var ph = phaseOf(av, oOff, dOff);
-    var route = (dep.iata || '???') + ' → ' + (arr.iata || '???');
-    var gateLine = (dep.terminal || dep.gate)
-        ? ((dep.terminal ? T('terminal') + ' ' + dep.terminal : '') +
-           (dep.terminal && dep.gate ? '  ' : '') +
-           (dep.gate ? T('gate') + ' ' + dep.gate : '')).trim()
-        : '';
-    var arrGate = (arr.terminal || arr.gate)
-        ? ((arr.terminal ? T('terminal') + ' ' + arr.terminal : '') +
-           (arr.terminal && arr.gate ? '  ' : '') +
-           (arr.gate ? T('gate') + ' ' + arr.gate : '')).trim()
-        : '';
-    var belt = arr.baggage ? T('belt') + ' ' + arr.baggage : '';
-    var delay = arr.delay || dep.delay;
-    var delayLine = delay ? T('delay') + ' ' + delay + ' min' : T('ontime');
-    var toDep = isNaN(ph.d) ? '' : dur((ph.d - Date.now()) / 60000);
-    var toArr = isNaN(ph.a) ? '' : dur((ph.a - Date.now()) / 60000);
-    var depAt = T('dshort') + ' ' + hhmm(dep.actual || dep.estimated || dep.scheduled);
-    var arrAt = T('ashort') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
-
-    // Hoechstens VIER Eintraege je Phase, und mit Balken nur drei: auf flint
-    // bleiben unter dem Kopfband und ueber der Fusszeile rund 105 Pixel, das
-    // sind eine grosse und drei normale Zeilen. Eine fuenfte lief in die
-    // Fusszeile hinein. Verspaetung haengt darum als "+13" an der Zeit, statt
-    // eine eigene Zeile zu belegen.
-    var delayTag = delay ? '  +' + delay : '';
-
-    if (ph.phase === PH_BOARDING) {
-      // Am Gate zaehlt das Gate.
-      L[0] = route;
-      L[1] = dep.gate ? T('gate') + ' ' + dep.gate : T('inn') + ' ' + toDep;
-      L[2] = dep.terminal ? T('terminal') + ' ' + dep.terminal : '';
-      L[3] = depAt + (dep.gate ? '  ' + T('inn') + ' ' + toDep : delayTag);
-    } else if (ph.phase === PH_DEPARTED) {
-      L[0] = route;
-      L[1] = arrAt;
-      L[2] = depAt + delayTag;
-    } else if (ph.phase === PH_ENROUTE) {
-      // Zeile 3 steht unter dem Balken, den die Uhr dazwischen zeichnet.
-      L[0] = route;
-      L[1] = T('remaining') + ' ' + toArr;
-      L[2] = arrAt + delayTag;
-    } else if (ph.phase === PH_APPROACH) {
-      // Der Countdown steht schon gross da; die Ankunftszeit waere dieselbe
-      // Auskunft zweimal. Wichtig ist jetzt, wohin man laeuft.
-      L[0] = '→ ' + (arr.iata || '???');
-      L[1] = T('inn') + ' ' + toArr;
-      L[2] = arrGate;
-      L[3] = belt;
-    } else if (ph.phase === PH_ARRIVED) {
-      L[0] = arr.iata || '???';
-      L[1] = T('attime') + ' ' + hhmm(arr.actual || arr.estimated || arr.scheduled);
-      L[2] = arrGate;
-      L[3] = belt;
-    } else if (ph.phase === PH_OFF) {
-      var sto = STATUS_TXT[av.flight_status];
-      L[0] = route;
-      L[1] = sto ? (sto[s_lang] || sto[0]) : (av.flight_status || T('unknown'));
-    } else {                              // PH_PLANNED
-      L[0] = route;
-      L[1] = T('inn') + ' ' + toDep;
-      L[2] = depAt + delayTag;
-      L[3] = gateLine;
-    }
-    return { lines: L, phase: ph.phase, progress: ph.progress,
-             wake: s.watch === false ? 0 : nextWakeAt(ph, Date.now()),
-             change: takeChanges() };
+    // VOR DEM FLUG: wo muss ich hin, und wann. Das Gate ist die grosse Zeile,
+    // sobald es eins gibt - danach sucht man am Flughafen.
+    L[0] = route;
+    L[1] = dep.gate ? (T('gate') + ' ' + dep.gate)
+                    : (toDep ? (T('inn') + ' ' + toDep) : depAt);
+    L[2] = dep.terminal ? T('terminal') + ' ' + dep.terminal : '';
+    L[3] = depAt + ((dep.gate && toDep) ? ('  ' + T('inn') + ' ' + toDep) : delayTag);
+    L[4] = delay ? T('delay') + ' ' + delay + ' min' : T('ontime');
   } else if (page === 1) {
-    L[0] = T('dep') + ' ' + (dep.iata || '');
-    L[1] = T('sched') + ' ' + hhmm(dep.scheduled) +
-           (dep.estimated && dep.estimated !== dep.scheduled
-              ? '  ' + T('revised') + ' ' + hhmm(dep.estimated) : '');
-    L[2] = T('arr') + ' ' + (arr.iata || '');
-    L[3] = T('sched') + ' ' + hhmm(arr.scheduled) +
-           (arr.estimated && arr.estimated !== arr.scheduled
-              ? '  ' + T('revised') + ' ' + hhmm(arr.estimated) : '');
-    var d = arr.delay || dep.delay;
-    L[4] = d ? T('delay') + ' ' + d + ' min' : T('ontime');
-  } else if (page === 2) {
-    L[0] = T('dep') + ' ' + (dep.iata || '');
-    L[1] = T('terminal') + ' ' + (dep.terminal || '?') +
-           '  ' + T('gate') + ' ' + (dep.gate || '?');
-    L[2] = T('arr') + ' ' + (arr.iata || '');
-    L[3] = T('terminal') + ' ' + (arr.terminal || '?') +
-           '  ' + T('gate') + ' ' + (arr.gate || '?');
-    L[4] = arr.baggage ? T('belt') + ' ' + arr.baggage : '';
-  } else if (page === 3) {
+    // IM FLUG: wie lange noch. Zwischen Zeile 2 und 3 zeichnet die Uhr den
+    // Fortschrittsbalken, aber nur solange wirklich geflogen wird.
     var rt = rec.rt;
-    if (rt) {
-      L[0] = dist(haversineKm(rt.oLat, rt.oLon, rt.dLat, rt.dLon), s.units);
-      var ts = utcOf(dep.scheduled, oOff), ta = utcOf(arr.scheduled, dOff);
-      if (!isNaN(ts) && !isNaN(ta)) L[1] = T('flighttime') + ' ' + dur((ta - ts) / 60000);
-      L[2] = (rt.oCity || '') + ' →';
-      L[3] = rt.dCity || '';
-      if (rec.gps != null) L[4] = T('youare') + ' ' + dist(rec.gps, s.units) + ' ' + T('todep');
-    } else {
-      L[0] = T('route');
-      L[1] = T('unknown');
-    }
-  } else if (page === 4) {
+    var flying = (ph.phase === PH_ENROUTE || ph.phase === PH_APPROACH) && toArr;
+    L[0] = route;
+    // Unterwegs zaehlt die Restzeit, sonst die geplante Reisedauer.
+    L[1] = flying ? (T('remaining') + ' ' + toArr) : travel;
+    L[2] = arrAt + delayTag;
+    // Die Flugzeit nur dann, wenn sie nicht schon gross oben steht.
+    if (!flying) L[3] = depAt;
+    else if (travel) L[3] = T('flighttime') + ' ' + travel;
+    // Die Distanz nur, wenn KEIN Balken gezeichnet wird. Unterwegs nimmt der
+    // Balken die Hoehe einer Zeile ein, und auf flint stiess die fuenfte Angabe
+    // dann in die Fusszeile.
+    if (rt && !flying) L[4] = dist(haversineKm(rt.oLat, rt.oLon, rt.dLat, rt.dLon), s.units);
+  } else {
+    // AM ZIEL: Wetter und Ortszeit, dann wohin man laeuft und wo der Koffer
+    // herauskommt.
     var wx = rec.wx, rt2 = rec.rt;
-    L[0] = T('dest') + ' ' + (arr.iata || '');
+    L[0] = (arr.iata || '???') + (rt2 && rt2.dCity ? '  ' + rt2.dCity : '');
     if (wx) {
       L[1] = Math.round(wx.t) + (s.units === 'imperial' ? ' °F' : ' °C');
       L[2] = wmoText(wx.c);
-      var now = new Date(Date.now() + dOff * 60000);
-      L[3] = T('localtime') + ' ' + pad2(now.getUTCHours()) + ':' + pad2(now.getUTCMinutes());
     } else {
       L[1] = T('nowx');
     }
-    if (rt2 && rt2.dCity) L[4] = rt2.dCity;
+    var now2 = new Date(Date.now() + dOff * 60000);
+    L[3] = T('localtime') + ' ' + pad2(now2.getUTCHours()) + ':' + pad2(now2.getUTCMinutes());
+    var ag = place(arr.terminal, arr.gate);
+    L[4] = arr.baggage ? (T('belt') + ' ' + arr.baggage + (ag ? '  ' + ag : '')) : ag;
   }
-  // Nebenseiten planen keinen Weckruf - das tut nur die Statusseite, sonst
-  // ueberschriebe ein Blaettern den Plan mit einer Null.
-  return { lines: L, phase: PH_OFF, progress: 0, wake: -1, change: '' };
+
+  return { lines: L, phase: ph.phase, progress: ph.progress,
+           wake: s.watch === false ? 0 : nextWakeAt(ph, Date.now()),
+           change: takeChanges() };
 }
 
 function ageText(code) {

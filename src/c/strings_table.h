@@ -14,11 +14,9 @@
 // sie fertig formatiert herueber - hier stehen nur die Texte, die die Uhr
 // selbst kennt.
 
-// ---- Seitennamen im Kopfband ----------------------------------------------
-STR(STR_PAGE_TIMES,    0,  "Times",     "Zeiten")
-STR(STR_PAGE_GATE,     0,  "Gate",      "Gate")
-STR(STR_PAGE_ROUTE,    0,  "Route",     "Strecke")
-STR(STR_PAGE_DEST,     0,  "Arrival",   "Ziel")
+// ---- Seitennamen -----------------------------------------------------------
+// Es gibt keine mehr: das Kopfband traegt die Flugphase, und welche der drei
+// Seiten man liest, sagen die Marken an der Seitenleiste.
 
 // Die Ueberschrift der Statusseite ist die Phase, in der der Flug gerade steckt.
 // Sie ersetzt das fruehere feste "Uebersicht": wer aufs Gate schaut, will dort

@@ -5,9 +5,13 @@
 // sondern fuer jede Seite fuenf fertig formatierte Zeilen - auf flint bleiben
 // von 64 KB nur wenige Kilobyte freier Heap.
 
-// Fuenf Seiten. Die Flugzeugseite (Kennzeichen, Muster, Halter) ist entfallen:
-// am Gate will niemand wissen, welcher Airbus da steht.
-#define FN_PAGE_COUNT 5
+// DREI Seiten, und zwar nach dem Ablauf einer Reise geordnet: vor dem Flug,
+// im Flug, am Ziel. Vorher waren es fuenf, sortiert nach Datenquelle - das ist
+// die Ordnung des Programmierers, nicht die des Reisenden.
+//
+// Die Uhr oeffnet auf der Seite, die zur aktuellen Flugphase passt; geblaettert
+// wird trotzdem durch alle drei.
+#define FN_PAGE_COUNT 3
 
 // Flugphasen. Die Telefonseite rechnet sie aus den Zeiten aus und schickt sie
 // mit; die Uhr waehlt danach die Ueberschrift und ob ein Fortschrittsbalken

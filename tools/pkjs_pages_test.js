@@ -104,7 +104,7 @@ store['flynformer_settings'] = JSON.stringify({
 // Was die Uhr mitschickt
 const CODE = process.env.FN_CODE || 'LH400';
 
-const PAGE_NAMES = ['Status', 'Zeiten', 'Gate', 'Strecke', 'Ziel'];
+const PAGE_NAMES = ['Vor dem Flug', 'Im Flug', 'Am Ziel'];
 const PHASE_NAMES = ['Geplant', 'Boarding', 'Gestartet', 'Im Flug', 'Landeanflug', 'Angekommen', 'Status'];
 let tooLong = 0;
 
@@ -130,7 +130,7 @@ sent = [];
 fire('appmessage', { payload: { REFRESH: 1, REQUEST_PAGE: 0, LANG: LANG, CODE: CODE } });
 
 setTimeout(function () {
-  for (let p = 0; p < 5; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
+  for (let p = 0; p < 3; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
   setTimeout(function () {
     dump(CODE + ', frisch geladen · ' + (LANG ? 'Deutsch' : 'Englisch'));
     console.log('\n===== Netzabrufe =====');

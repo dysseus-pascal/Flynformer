@@ -6,9 +6,14 @@ da, **was gerade zählt**: am Gate die Gate-Nummer, unterwegs der Fortschritt,
 nach der Landung das Gepäckband. Wer mehr will, blättert mit Hoch und Runter
 durch vier weitere Seiten.
 
-Farbschema Amber auf Schwarz im Stil einer Abflugtafel, Gliederung wie ein
-Pebble-Timeline-Pin. Die Oberfläche folgt der **Sprache der Uhr** (Deutsch und
-Englisch, Englisch als Rückfall).
+Orange auf Weiss — hell, nicht düster: man fliegt schliesslich in den Urlaub.
+Die Oberfläche folgt der **Sprache der Uhr** (Deutsch und Englisch, Englisch als
+Rückfall).
+
+Dass der Grund hell ist, hat einen Grund über den Geschmack hinaus: das
+Pebble-Display **leuchtet nicht, es reflektiert**. Ein heller Grund ist im
+Sonnenlicht deutlich besser lesbar als ein dunkler — und genau das ist die Lage
+am Gate.
 
 ## Der Kern der Sache: ein Abruf reicht
 
@@ -18,14 +23,12 @@ gut drei pro Tag. Deshalb ist die App darauf gebaut, damit hauszuhalten:
 
 | Seite | Inhalt | Quelle | Kosten |
 |---|---|---|---|
-| 1 Status | was in dieser Flugphase zählt | aviationstack | **1 Abfrage** |
-| 2 Zeiten | Plan- und Neuzeiten, Verspätung | dieselbe Antwort | 0 |
-| 3 Gate | Terminal, Gate, Gepäckband | dieselbe Antwort | 0 |
-| 4 Strecke | Distanz, Flugzeit, GPS-Abstand | [adsbdb](https://api.adsbdb.com) | 0 |
-| 5 Ziel | Wetter und Ortszeit | [Open-Meteo](https://open-meteo.com) | 0 |
+| 1 Vor dem Flug | Gate, Terminal, Abflug, Countdown | aviationstack | **1 Abfrage** |
+| 2 Im Flug | Restzeit, Fortschritt, Ankunft | dieselbe Antwort | 0 |
+| 3 Am Ziel | Wetter, Ortszeit, Gepäckband | [Open-Meteo](https://open-meteo.com) + dieselbe Antwort | 0 |
 
-Eine einzige bezahlte Antwort trägt die ersten drei Seiten; Strecke, Wetter und
-die beiden Zeitzonen kommen aus kostenlosen Quellen.
+Eine einzige bezahlte Antwort trägt alle drei Seiten; Strecke, Wetter und die
+beiden Zeitzonen kommen aus kostenlosen Quellen.
 
 Zwei Folgen für die Bedienung:
 
@@ -35,30 +38,34 @@ Zwei Folgen für die Bedienung:
 - **Ein Zähler.** Die Fusszeile zeigt immer, wie viele Abfragen dieser Monat
   gekostet hat. Bei 100 im Monat gehört das ins Bild.
 
-## Der Statusschirm
+## Drei Seiten, geordnet wie die Reise
 
-Die erste Seite hat keinen festen Inhalt. Sie zeigt, was in der Phase zählt, in
-der der Flug gerade steckt — und sonst nichts. Die Phase rechnet die Telefonseite
-aus den Zeiten aus, weil nur sie die echten Zeitzonen beider Flughäfen kennt.
+Vorher waren es fünf Seiten, sortiert nach Datenquelle — das ist die Ordnung des
+Programmierers, nicht die des Reisenden. Jetzt sind es drei, und sie folgen dem
+Ablauf:
 
-| Phase | Wann | Was gross dasteht | Was noch |
-|---|---|---|---|
-| Geplant | mehr als 50 min vor dem Abflug | Countdown | Abflugzeit, Gate falls bekannt |
-| Boarding | ab 50 min vor dem Abflug | **Gate** | Terminal, Abflug, Countdown |
-| Gestartet | erste 20 min in der Luft | Ankunftszeit | Abflug, Verspätung |
-| Im Flug | dazwischen | Restzeit | **Fortschrittsbalken**, Ankunft |
-| Landeanflug | letzte 30 min | Countdown | Ankunfts-Gate, Gepäckband |
-| Angekommen | gelandet | Landezeit | Gate, Gepäckband |
+| Seite | Was gross dasteht | Was noch |
+|---|---|---|
+| **Vor dem Flug** | Gate | Terminal, Abflugzeit, Countdown, Verspätung |
+| **Im Flug** | Restzeit | **Fortschrittsbalken**, Ankunft, Flugzeit |
+| **Am Ziel** | Temperatur | Wetter, Ortszeit, Gepäckband, Ankunfts-Gate |
 
-Der Fortschritt ist eine Kette aus zwölf Kästchen, keine glatte Füllkante: auf
-einem kleinen Schirm liest sich «sieben von zwölf» auf einen Blick, eine Kante
-muss man schätzen. Er erscheint **nur im Reiseflug** — am Gate wäre ein Balken
-bei 0 % keine Auskunft, sondern eine Irreführung.
+Die App öffnet auf der Seite, die zur aktuellen Flugphase passt — am Gate also
+auf der ersten, unterwegs auf der zweiten. Das geschieht **einmal je App-Start**:
+wer danach blättert, wird nicht zurückgeworfen, sobald die nächste Antwort
+eintrifft. Geblättert wird mit Hoch und Runter durch alle drei.
 
-Höchstens vier Angaben je Phase, mit Balken drei. Das ist keine Vorliebe,
-sondern das, was auf `flint` zwischen Kopfband und Fusszeile passt; eine fünfte
-Zeile lief in die Fusszeile hinein. Verspätung hängt darum als `+13` an der
-Zeit, statt eine eigene Zeile zu belegen.
+Das **Kopfband** ist auf eine Zeile geschrumpft, auf emery von 60 auf 34 Pixel —
+von einem Viertel der Bildhöhe auf ein Siebtel. Links die Flugnummer, rechts die
+Flugphase. Welche Seite man liest, sagen die Marken an der Seitenleiste; was
+gerade passiert, ist die nützlichere Auskunft. Auf dem runden Schirm stehen die
+beiden untereinander, weil der Kreis die Ränder abschneiden würde.
+
+Der **Fortschritt** ist eine Kette aus zwölf Kästchen, keine glatte Füllkante:
+auf einem kleinen Schirm liest sich «fünf von zwölf» auf einen Blick, eine Kante
+muss man schätzen. Er erscheint nur im Reiseflug — am Gate wäre ein Balken bei
+0 % keine Auskunft, sondern eine Irreführung. Solange er steht, entfällt die
+Distanz: auf `flint` stiess die fünfte Angabe sonst in die Fusszeile.
 
 ## Timeline und Meldungen
 
@@ -205,9 +212,14 @@ Zeichenreihenfolge von hinten nach vorn: Leitwerk, Flügel, Pylone, Gondeln, dan
 der Rumpf darüber — so läuft seine Kontur sauber vor den Flügelwurzeln durch,
 wie in der Zeichnung. Das Gesicht zuletzt.
 
-Auf `flint` gibt es kein Amber. Dort ist das Kopfband weiss mit schwarzer
-Schrift, und das Flugzeug wird eine weisse Fläche mit schwarzen Aussparungen —
-dasselbe Verhältnis ohne Farbe.
+**Flyn ist weiss** — und weil der Seitengrund ebenfalls weiss ist, läuft der
+Anflug auf einem orangen Feld. Sonst bliebe von ihm nur der Umriss, also wieder
+eine Strichzeichnung. Der Farbwechsel macht den Anflug zugleich als Ladeanzeige
+kenntlich: orange heisst, es wird geholt.
+
+Auf `flint` gibt es kein Orange. Dort ist das Kopfband schwarz mit weisser
+Schrift auf weissem Grund, und der Anflug läuft auf schwarzem Feld — dasselbe
+Verhältnis ohne Farbe.
 
 ## Was diese App nicht kann
 
