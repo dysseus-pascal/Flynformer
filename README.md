@@ -149,9 +149,16 @@ trotzdem zu Ende; dauert es länger, steht danach «Lade…» in der Fusszeile.
 Der Weg ist ein **Bogen**: das Flugzeug taucht als Punkt am oberen Rand auf,
 wächst gleichmässig, zieht dabei nach unten durch die Bildmitte und steigt gross
 wieder nach oben aus dem Bild — so, wie eine Maschine über einen hinwegzieht.
-Als Formel `y = h · u · (3 − 4u)`, mit `u` als Fortschritt von 0 bis 1. Die
-Grösse wächst dabei gleichmässig durch, ohne Beschleunigung: das Ruhige an der
-Bewegung ist das Wachsen, die Kurve macht der Weg.
+Als Formel `y = h · (3,35u − 4,7u²)`, mit `u` als Fortschritt von 0 bis 1: bei
+`u = 0` am oberen Rand, bei `u = 0,36` am tiefsten Punkt knapp unter der Mitte,
+bei `u = 1` eineinhalb Bildhöhen darüber. Die Grösse wächst gleichmässig durch,
+ohne Beschleunigung: das Ruhige an der Bewegung ist das Wachsen, die Kurve macht
+der Weg.
+
+Der Hub von 1,35 Bildhöhen ist nicht gegriffen: seit die Gondeln an Pylonen
+tiefer hängen, liegt die Unterkante bei 87 von 100 Rastereinheiten. Bei
+dreifacher Bildbreite sind das gut ein Drittel der Grösse unter der Mitte — mit
+nur einer Bildhöhe blieben sie am Ende sichtbar im Bild hängen.
 
 **Beim Öffnen fliegt nichts und kostet nichts.** Da steht sofort der gespeicherte
 Stand mit seinem Alter. Das ist Absicht: ein Anflug beim Start hiesse, dass
@@ -160,28 +167,33 @@ wäre das Kontingent in 25 Tagen.
 
 ## Das Flugzeug
 
-Von vorn gesehen, als **gefüllte Fläche** aus Polygonen und Kreisen — kein
-Bitmap, nur deshalb kann es beim Anflug vom Punkt auf das Dreifache der
-Bildbreite wachsen, ohne zu treppen.
+Nach einer Handzeichnung gebaut, als **gefüllte Fläche** aus Polygonen und
+Kreisen — kein Bitmap, nur deshalb kann es beim Anflug vom Punkt auf das
+Dreifache der Bildbreite wachsen, ohne zu treppen.
 
-Eine Fläche und keine Kontur, weil es früh im Anflug nur ein paar Pixel gross
-ist: von einer Strichzeichnung bliebe dort nichts als Gekrakel. Erst die
-Aussparungen machen daraus eine Figur — zwei Kanzelfenster und der dunkle
-Lufteinlass in jeder Gondel.
+Was die Zeichnung vorgibt:
 
-**Die Gondeln sind Kreise.** Von vorn gesehen ist eine Triebwerksgondel rund.
-Vorher waren es schräge Vierecke, die flach auf dem Flügel sassen — die lasen
-sich als Landeklappen. Die Kreise hängen unter dem Flügel und wölben sich nach
-unten heraus. Sie bekommen bewusst **keinen** schwarzen Ring: der lag genau über
-dem Flügel und durchtrennte ihn.
+- **Sechseckiger Rumpf.** Kantig, nicht rund: flache Oberkante, zwei kurze
+  Schultern nach aussen, zwei lange Flanken auf eine flache Unterkante.
+- **Waagrechte Flügel.** Lange dünne Balken fast über die volle Breite, ohne
+  V-Stellung.
+- **Triebwerke an Pylonen.** Sie hängen an einem sichtbaren Steg deutlich unter
+  dem Flügel, statt mit ihm zu verschmelzen. Erst dadurch darf die Gondel ihren
+  dunklen Rand behalten: sie liegt nicht mehr über dem Flügel und kann ihn nicht
+  mehr durchtrennen — was sie in einem früheren Entwurf tat, mit einem Stummel
+  innen und einem abgetrennten Balken aussen.
+- **Ein Gesicht.** Zwei quadratische Fenster mit dunklen Pupillen und ein breites
+  V darunter. Das ist der Unterschied zwischen Flugzeug und
+  Zeichentrickflugzeug, und eine Fläche mit Aussparungen liest sich auf dem
+  kleinen Schirm schneller als jede Strichzeichnung.
 
-**Die Flügel steigen nach aussen an.** Diese V-Stellung ist das Merkmal, an dem
-man eine Frontansicht auf einen Blick erkennt; waagrechte Flügel liessen offen,
-von wo man draufschaut. Sie sind mit zehn bis elf Rastereinheiten bewusst dick —
-der Umriss liegt mittig auf der Kante und frisst von beiden Seiten.
+Unterhalb von 70 Pixeln Grösse bleiben die Feinheiten weg — Mittellinie der
+Finne und die inneren Augenlagen. Klein gezeichnet würde daraus nur Matsch, und
+der Anflug beginnt bei wenigen Pixeln.
 
-Zeichenreihenfolge von hinten nach vorn: Seiten- und Höhenleitwerk, Rumpf,
-Gondeln, zuletzt die Aussparungen.
+Zeichenreihenfolge von hinten nach vorn: Leitwerk, Flügel, Pylone, Gondeln, dann
+der Rumpf darüber — so läuft seine Kontur sauber vor den Flügelwurzeln durch,
+wie in der Zeichnung. Das Gesicht zuletzt.
 
 Auf `flint` gibt es kein Amber. Dort ist das Kopfband weiss mit schwarzer
 Schrift, und das Flugzeug wird eine weisse Fläche mit schwarzen Aussparungen —
