@@ -342,3 +342,13 @@ kein Code, keine Gestaltung, kein Name. Der Entwurf, das Flugzeug und die
 Auswahl der Datenquellen sind eigen.
 
 Datenquellen: aviationstack (Flugstatus, eigener Schlüssel nötig), adsbdb (Strecke und Koordinaten, kostenlos), Open-Meteo (Wetter, CC BY 4.0).
+
+## Lizenz
+
+Gemeinfrei, [CC0 1.0](LICENSE). Kopieren, ändern, verkaufen, einbauen — ohne
+Bedingung, ohne Namensnennung, ohne Rückfrage.
+
+CC0 statt der Unlicense, weil das Schweizer Urheberrecht einen Verzicht gar
+nicht kennt; CC0 trägt für genau diesen Fall eine Ersatzlizenz in sich, die
+dasselbe erlaubt. Nicht erfasst sind die mitgeschnittenen Testantworten fremder
+Dienste, siehe [NOTICE](NOTICE).

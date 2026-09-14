@@ -1,0 +1,23 @@
+Hinweise zu Fremdmaterial
+=========================
+
+Die Widmung in LICENSE gilt fuer alles in diesem Repository mit einer
+Ausnahme:
+
+tools/fixtures/*.json
+    Mitgeschnittene Antworten fremder Dienste, damit die Tests ohne Netz
+    und ohne Abfragekontingent laufen. Es sind Tatsachenangaben zu Fluegen,
+    Flugzeugen und Wetter, keine eigene Schoepfung -- aber auch nichts,
+    worueber dieses Repository verfuegen koennte.
+
+      lh400.json         aviationstack (https://aviationstack.com)
+      route_LH400.json   adsbdb (https://www.adsbdb.com)
+      hex_3C651A.json    adsbdb
+      wx_jfk.json        Open-Meteo (https://open-meteo.com), CC BY 4.0
+
+    Die laufende App holt diese Angaben selbst bei den Diensten; wer sie
+    weiterverwendet, richtet sich nach deren Bedingungen. Open-Meteo
+    verlangt eine Namensnennung, die die App auf der Zielseite leistet.
+
+Zum Bauen wird @rebble/clay geladen (MIT). Es liegt nicht in diesem
+Repository, sondern kommt ueber npm und landet in node_modules/.
