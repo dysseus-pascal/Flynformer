@@ -1,5 +1,7 @@
 # Flynformer
 
+<img src="store/flyn-emery.gif" width="200" alt="Flyn im Anflug">
+
 Flugverfolgung für Pebble (Emery, Flint, Gabbro). Flugnummer **auf der Uhr**
 eintippen, ein Flugzeug fliegt heran, während die Daten kommen — und dann steht
 da, **was gerade zählt**: am Gate die Gate-Nummer, unterwegs der Fortschritt,

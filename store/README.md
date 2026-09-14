@@ -1,7 +1,40 @@
-# Appstore listing
+# Appstore
 
-Ready to paste. The short line is for the summary field, the rest for the
-description.
+Alles, was der Store braucht.
+
+## Bilder
+
+`screenshots/<plattform>/` — je fünf, in nativer Auflösung: emery 200×228,
+flint 144×168, gabbro 260×260.
+
+| Bild | Inhalt |
+|---|---|
+| `1-enter-flight` | Flugnummer auf der Uhr eintippen |
+| `2-flyn` | Flyn mitten im Anflug |
+| `3-before-flight` | Gate, Terminal, Countdown |
+| `4-in-flight` | Restzeit mit Fortschrittsbalken |
+| `5-at-destination` | Wetter, Ortszeit, Gepäckband |
+
+Jede Seite ist in **ihrer eigenen Flugphase** aufgenommen. Das Kopfband zeigt
+die Phase, nicht den Seitennamen — «In flight» über der Gate-Seite wäre zwar
+richtig und trotzdem verwirrend.
+
+`flyn-<plattform>.gif` zeigt den Anflug als Endlosschleife, 2,76 Sekunden.
+
+Aufgenommen aus dem Emulator mit Demo-Daten, nicht mit einem echten Abruf —
+sonst kostete jeder Durchlauf eine der hundert Monatsabfragen. Der Anflug lief
+dabei in Zeitlupe, damit die Kamera ihn überhaupt trifft; gezeichnet wird exakt
+dasselbe wie im Betrieb, nur langsamer.
+
+Neu erzeugt werden sie mit `fn_store.sh` und `fn_frames.sh` in WSL, zusammen-
+gesetzt mit `mkgif.js`. Dass der selbstgeschriebene GIF-Kodierer stimmt, prüft
+`checkgif.js` nach: es zerlegt das fertige GIF wieder und hält jedes Pixel
+gegen die Ausgangsbilder.
+
+## Text
+
+Zum Kopieren: die kurze Zeile fürs Zusammenfassungsfeld, der Rest für die
+Beschreibung.
 
 ---
 
