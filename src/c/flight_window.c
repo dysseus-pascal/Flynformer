@@ -94,20 +94,35 @@ static void prv_bar(GContext *ctx, GRect box, int percent) {
   }
 }
 
+// Je Zeile ZWEI Groessen: die erste, wenn der Text hineinpasst, sonst die
+// zweite. Eine feste Groesse muesste sich an der laengsten denkbaren Zeile
+// ausrichten - und die kommt selten vor. Die meisten Zeilen sind "FRA → JFK"
+// oder "arr 19:36 +13" und haetten reichlich Platz; nur eine Wetterlage wie
+// "Thunderstorm with hail" oder ein langer Stadtname sprengen den Rahmen, und
+// die stehen dann eben kleiner da.
 #if PBL_DISPLAY_WIDTH >= 180
-  #define F_FNO   FONT_KEY_GOTHIC_24_BOLD
-  #define F_SUB   FONT_KEY_GOTHIC_18
-  #define F_LINE  FONT_KEY_GOTHIC_18
-  #define F_FOOT  FONT_KEY_GOTHIC_14
-  #define LINE_H  25
-  #define BIG_H   34
+  #define F_FNO    FONT_KEY_GOTHIC_24_BOLD
+  #define F_SUB    FONT_KEY_GOTHIC_24
+  #define F_SUB_S  FONT_KEY_GOTHIC_18
+  #define F_LINE   FONT_KEY_GOTHIC_24
+  #define F_LINE_S FONT_KEY_GOTHIC_18
+  #define F_FOOT   FONT_KEY_GOTHIC_18
+  #define F_FOOT_S FONT_KEY_GOTHIC_14
+  #define LINE_H   28
+  #define BIG_H    34
 #else
-  #define F_FNO   FONT_KEY_GOTHIC_18_BOLD
-  #define F_SUB   FONT_KEY_GOTHIC_14
-  #define F_LINE  FONT_KEY_GOTHIC_14
-  #define F_FOOT  FONT_KEY_GOTHIC_14
-  #define LINE_H  20
-  #define BIG_H   28
+  // Auf 144x168 ist der Schirm zu knapp fuer eine zweite Stufe nach oben: mit
+  // fuenf Zeilen stiess schon 24er Schrift in die Fusszeile. Eine Stufe von 14
+  // auf 18 ist alles, was hier hineingeht.
+  #define F_FNO    FONT_KEY_GOTHIC_18_BOLD
+  #define F_SUB    FONT_KEY_GOTHIC_18
+  #define F_SUB_S  FONT_KEY_GOTHIC_14
+  #define F_LINE   FONT_KEY_GOTHIC_18
+  #define F_LINE_S FONT_KEY_GOTHIC_14
+  #define F_FOOT   FONT_KEY_GOTHIC_14
+  #define F_FOOT_S FONT_KEY_GOTHIC_14
+  #define LINE_H   21
+  #define BIG_H    28
 #endif
 
 static void prv_text(GContext *ctx, const char *s, const char *font,
@@ -115,6 +130,20 @@ static void prv_text(GContext *ctx, const char *s, const char *font,
   if (!s || !s[0]) return;
   graphics_draw_text(ctx, s, fonts_get_system_font(font), box,
                      GTextOverflowModeTrailingEllipsis, align, NULL);
+}
+
+// Dasselbe, aber mit der groesseren Schrift, wenn der Text hineinpasst.
+//
+// Gemessen wird in einem ABSICHTLICH ZU BREITEN Kasten: in einem engen wuerde
+// der Text umbrechen, und die zurueckgegebene Breite waere dann die des
+// Kastens statt die des Textes - die Pruefung ginge immer gut aus.
+static void prv_text_fit(GContext *ctx, const char *s, const char *big,
+                         const char *small, GRect box, GTextAlignment align) {
+  if (!s || !s[0]) return;
+  const GSize sz = graphics_text_layout_get_content_size(
+      s, fonts_get_system_font(big), GRect(0, 0, 1000, box.size.h),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  prv_text(ctx, s, (sz.w <= box.size.w) ? big : small, box, align);
 }
 
 static void prv_update(Layer *layer, GContext *ctx) {
@@ -151,15 +180,18 @@ static void prv_update(Layer *layer, GContext *ctx) {
   const int16_t band_y = (band - 22) / 2;
   prv_text(ctx, p->fno[0] ? p->fno : S(STR_NO_FLIGHT), F_FNO,
            GRect(m, band_y, b.size.w - 2 * m, band), GTextAlignmentLeft);
-  prv_text(ctx, S(prv_phase_name(p->phase)), F_SUB,
-           GRect(m, band_y + 4, b.size.w - m - 6, band), GTextAlignmentRight);
+  // Auf derselben Hoehe wie die Flugnummer, nicht vier Punkte tiefer: beide
+  // stehen jetzt in derselben Groesse, ein Versatz liesse sie schief wirken -
+  // und bei "Boarding" schnitte das Band die Unterlaenge ab.
+  prv_text_fit(ctx, S(prv_phase_name(p->phase)), F_SUB, F_SUB_S,
+               GRect(m, band_y, b.size.w - m - 6, band), GTextAlignmentRight);
 #else
   // Runder Schirm: nebeneinander wuerde der Kreis die Raender abschneiden,
   // also untereinander und mittig. Darum bleibt das Band dort auch hoeher.
   prv_text(ctx, p->fno[0] ? p->fno : S(STR_NO_FLIGHT), F_FNO,
            GRect(m, 2, b.size.w - 2 * m, band / 2 + 6), GTextAlignmentCenter);
-  prv_text(ctx, S(prv_phase_name(p->phase)), F_SUB,
-           GRect(m, band / 2 + 1, b.size.w - 2 * m, band / 2), GTextAlignmentCenter);
+  prv_text_fit(ctx, S(prv_phase_name(p->phase)), F_SUB, F_SUB_S,
+               GRect(m, band / 2 + 1, b.size.w - 2 * m, band / 2), GTextAlignmentCenter);
 #endif
 
   // Die Trennlinie laeuft NUR ueber die Karte, nicht ueber die Seitenleiste.
@@ -200,26 +232,39 @@ static void prv_update(Layer *layer, GContext *ctx) {
     if (!p->line[i][0]) continue;
     const bool big = (i == 1);
     if (big) graphics_context_set_text_color(ctx, FN_COLOR_BIG);
-    prv_text(ctx, p->line[i], big ? FONT_KEY_GOTHIC_28_BOLD : F_LINE,
-             GRect(m, y, cw - m - 4, big ? BIG_H + 6 : LINE_H + 4), al);
+    if (big) {
+      prv_text(ctx, p->line[i], FONT_KEY_GOTHIC_28_BOLD,
+               GRect(m, y, cw - m - 4, BIG_H + 6), al);
+    } else {
+      prv_text_fit(ctx, p->line[i], F_LINE, F_LINE_S,
+                   GRect(m, y, cw - m - 4, LINE_H + 4), al);
+    }
     if (big) graphics_context_set_text_color(ctx, FN_COLOR_TEXT);
     y += big ? BIG_H : LINE_H;
   }
 
-  const int16_t fy = b.size.h - 17;
+  // Drei Punkte hoeher als frueher: die Fusszeile steht jetzt in 18er statt
+  // 14er Schrift und braeuchte sonst Platz, den der untere Rand nicht hat.
+  const int16_t fy = b.size.h - PBL_IF_ROUND_ELSE(24, 20);
   // Eine Aenderung verdraengt Alter und Kontingent und steht in der Akzentfarbe
   // da - sie ist der Grund, warum die Uhr ueberhaupt nachgesehen hat.
   if (p->change[0]) {
     graphics_context_set_text_color(ctx, FN_COLOR_BIG);
-    prv_text(ctx, p->change, F_FOOT, GRect(m, fy, cw - m - 4, 16), al);
+    prv_text_fit(ctx, p->change, F_FOOT, F_FOOT_S, GRect(m, fy, cw - m - 4, 20), al);
     return;
   }
   graphics_context_set_text_color(ctx, FN_COLOR_DIM);
   if (p->status[0]) {
-    prv_text(ctx, p->status, F_FOOT, GRect(m, fy, cw - m - 4, 16), al);
+    prv_text_fit(ctx, p->status, F_FOOT, F_FOOT_S, GRect(m, fy, cw - m - 4, 20), al);
   } else {
-    prv_text(ctx, p->age, F_FOOT, GRect(m, fy, cw - m - 4, 16), GTextAlignmentLeft);
-    prv_text(ctx, p->quota, F_FOOT, GRect(m, fy, cw - m - 4, 16), GTextAlignmentRight);
+    // Alter und Kontingent teilen sich die Zeile: jedes bekommt die halbe
+    // Breite zum Messen, sonst hielte sich eines fuer gross genug und
+    // ueberschriebe das andere.
+    const int16_t half = (cw - m - 4) / 2 - 2;
+    prv_text_fit(ctx, p->age, F_FOOT, F_FOOT_S,
+                 GRect(m, fy, half, 20), GTextAlignmentLeft);
+    prv_text_fit(ctx, p->quota, F_FOOT, F_FOOT_S,
+                 GRect(cw - m - 4 - half, fy, half, 20), GTextAlignmentRight);
   }
 }
 

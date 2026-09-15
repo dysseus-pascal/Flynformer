@@ -125,11 +125,17 @@ static void prv_update(Layer *layer, GContext *ctx) {
     }
   }
 
-  // Hinweis unten
+  // Hinweis unten. Auf dem grossen Schirm eine Stufe groesser - der Text bricht
+  // ohnehin auf zwei Zeilen um, und zwischen den Stellen und dem unteren Rand
+  // steht Platz dafuer bereit. Auf 144x168 bleibt es bei 14: dort reichen die
+  // Stellen fast bis hinunter.
+  const bool wide = (PBL_DISPLAY_WIDTH >= 180);
   graphics_context_set_text_color(ctx, FN_COLOR_DIM);
   graphics_draw_text(ctx, S(s_slot == SLOTS - 1 ? STR_INPUT_CONFIRM : STR_INPUT_HINT),
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(FN_MARGIN, b.size.h - 40, b.size.w - 2 * FN_MARGIN, 36),
+                     fonts_get_system_font(wide ? FONT_KEY_GOTHIC_18
+                                                : FONT_KEY_GOTHIC_14),
+                     GRect(FN_MARGIN, b.size.h - (wide ? 48 : 40),
+                           b.size.w - 2 * FN_MARGIN, wide ? 46 : 36),
                      GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 
