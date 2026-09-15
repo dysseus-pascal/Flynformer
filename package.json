@@ -1,7 +1,7 @@
 {
   "name": "flynformer",
   "author": "dysseus-pascal",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "license": "CC0-1.0",
   "keywords": [
     "pebble-app"
@@ -52,7 +52,14 @@
       "WATCH_FLIGHT"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "bitmap",
+          "name": "IMAGE_ICON",
+          "file": "images/system_icon.png"
+        }
+      ]
     }
   }
 }
