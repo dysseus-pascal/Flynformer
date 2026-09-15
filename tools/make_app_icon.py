@@ -2,24 +2,27 @@
 """App-Symbol: der Flieger von oben (25x25).
 
 Aufruf: make_app_icon.py <zielordner>
-Erzeugt system_icon.png - schwarze Konturlinie auf durchsichtigem Grund.
+Erzeugt system_icon.png - schwarze Linien auf durchsichtigem Grund.
 
 NICHT der Flyn aus src/c/plane_fx.c. Der hat Augen, Mund, Triebwerke und eine
 eigene Kontur - bei 25 Punkten waere jedes davon ein bis zwei Punkte, und
 uebrig bliebe ein Fleck. Hier steht die Silhouette von oben: Rumpf, gepfeilte
 Tragflaechen, Hoehenleitwerk.
 
-NUR UMRISS, KEINE FLAECHE. Der Starter zeichnet Symbole einfarbig: eine rote
-Kapsel und ein violettes Herz kamen dort beide als graue Flecken heraus
-(nachgemessen im Emulator). Eine Linie traegt bei 25 Punkten mehr Form als
-eine Flaeche - und alle Symbole der Familie sehen damit gleich aus.
+MASSSTAB IST DAS SYSTEMSYMBOL. Die Uhr-Kachel von "Watchfeces" im Starter wurde
+Punkt fuer Punkt nachgemessen: 24 von 25 Punkten hoch, Linien 2 bis 3 Punkte
+stark, rund 180 schwarze Punkte. Danach richten sich Groesse und Strichstaerke
+hier - eine duennere Linie sieht daneben aus wie ein Versehen.
 
-DESHALB AUCH KEINE ~bw-FASSUNG: sie waere Punkt fuer Punkt dieselbe Datei.
+NUR LINIEN, KEINE FLAECHE, und keine ~bw-Fassung. Der Starter zeichnet Symbole
+einfarbig: eine farbige Flaeche kam dort als grauer Fleck heraus (im Emulator
+nachgemessen - Rot 255,0,0 wurde zu Grau 171,171,171). Eine schwarze Linie ist
+auf jeder Uhr dieselbe Datei.
 
-Aus drei einfachen Formen zusammengesetzt statt aus einem Streckenzug - der
-waere bei dieser Groesse schwerer zu treffen als drei Formen, die sich
-ueberlappen duerfen. Die inneren Kanten verschwinden von selbst, weil nur der
-Rand der VEREINIGUNG gezeichnet wird.
+AUS STRICHEN GEBAUT, nicht aus umrissenen Flaechen. Ein umrissenes Dreieck las
+sich bei dieser Groesse als Pfeil: der Kreis des Vorbilds traegt als blosser
+Rand, ein Dreieck nicht. Rumpf, Tragflaechen und Leitwerk sind deshalb Balken
+und Strecken - jede Linie IST der Strich, es gibt nichts zu umranden.
 """
 import os
 import struct
@@ -28,13 +31,10 @@ import zlib
 
 W = H = 25
 SS = 4                           # Ueberabtastung je Achse
+LINE = 2                         # Strichstaerke in Punkten, wie beim Vorbild
 
 CX = 12.0                        # Mittelachse
-BODY_HW = 2.2                    # halbe Rumpfbreite
-BODY_TOP, BODY_BOT = 3.0, 21.0
-WING = ((CX, 6.5), (24.0, 17.0), (0.0, 17.0))
-TAIL = ((CX, 15.5), (19.0, 22.5), (5.0, 22.5))
-
+SW = LINE / 2.0 + 0.4            # halbe Strichstaerke der Schraegen
 
 
 def png(path, w, h, rows):
@@ -50,9 +50,53 @@ def png(path, w, h, rows):
         f.write(out)
 
 
-def in_circle(x, y, cx, cy, r):
-    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+def raster(test):
+    """Vierfach ueberabtasten, bei halber Deckung schneiden. Harte Kanten."""
+    grid = []
+    for py in range(H):
+        row = []
+        for px in range(W):
+            hits = 0
+            for sy in range(SS):
+                for sx in range(SS):
+                    if test(px + (sx + 0.5) / SS, py + (sy + 0.5) / SS):
+                        hits += 1
+            row.append(hits * 2 >= SS * SS)
+        grid.append(row)
+    return grid
 
+
+def write(dest, grid):
+    rows = []
+    for y in range(H):
+        r = []
+        for x in range(W):
+            r += [0, 0, 0, 255] if grid[y][x] else [0, 0, 0, 0]
+        rows.append(r)
+    png(os.path.join(dest, "system_icon.png"), W, H, rows)
+    old = os.path.join(dest, "system_icon~bw.png")
+    if os.path.exists(old):
+        os.remove(old)
+        print("system_icon~bw.png entfernt - die Linie gilt fuer alle Uhren")
+    n = sum(1 for r in grid for v in r if v)
+    ys = [y for y in range(H) if any(grid[y])]
+    print("system_icon.png: %d Punkte schwarz, %d hoch (Vorbild: 180 / 24)"
+          % (n, (ys[-1] - ys[0] + 1) if ys else 0))
+
+
+def seg(x, y, ax, ay, bx, by, r):
+    """Liegt der Punkt hoechstens r von der Strecke a-b entfernt?"""
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 == 0 else ((x - ax) * dx + (y - ay) * dy) / L2
+    t = max(0.0, min(1.0, t))
+    ex, ey = x - (ax + t * dx), y - (ay + t * dy)
+    return ex * ex + ey * ey <= r * r
+
+
+def bar(x, y, x0, y0, x1, y1):
+    """Ein gerades Balkenstueck, Ecken eingeschlossen."""
+    return x0 <= x <= x1 and y0 <= y <= y1
 
 def in_triangle(x, y, a, b, c):
     """Liegt der Punkt im Dreieck? Ueber das Vorzeichen der drei Kanten."""
@@ -62,84 +106,24 @@ def in_triangle(x, y, a, b, c):
     return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
 
 
-def in_body(x, y):
-    """Rumpf: gerader Teil plus spitze Nase."""
-    dx = abs(x - CX)
-    if BODY_TOP <= y <= BODY_BOT:
-        return dx <= BODY_HW
-    if y < BODY_TOP:
-        t = (BODY_TOP - y) / 3.0
-        return t <= 1.0 and dx <= BODY_HW * (1.0 - t)
-    return False
-
-
 def inside(x, y):
-    return in_body(x, y) or in_triangle(x, y, *WING) or in_triangle(x, y, *TAIL)
-
-
-
-def solid():
-    """Die gefuellte Form, vierfach ueberabgetastet und bei halber Deckung
-    geschnitten. Harte Kanten, keine Zwischentoene - so halten es die
-    Schwesterapps."""
-    grid = []
-    for py in range(H):
-        row = []
-        for px in range(W):
-            hits = 0
-            for sy in range(SS):
-                for sx in range(SS):
-                    if inside(px + (sx + 0.5) / SS, py + (sy + 0.5) / SS):
-                        hits += 1
-            row.append(hits * 2 >= SS * SS)
-        grid.append(row)
-    return grid
-
-
-def outline(grid):
-    """Der Rand der Form: gefuellte Punkte, die an einen freien grenzen.
-
-    Auf Bildpunktebene gerechnet, nicht durch Schrumpfen der Flaeche - so ist
-    die Linie ueberall GENAU einen Punkt breit, auch in flachen Winkeln.
-    """
-    out = []
-    for y in range(H):
-        row = []
-        for x in range(W):
-            if not grid[y][x]:
-                row.append(False)
-                continue
-            edge = False
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                nx, ny = x + dx, y + dy
-                if nx < 0 or ny < 0 or nx >= W or ny >= H or not grid[ny][nx]:
-                    edge = True
-                    break
-            row.append(edge)
-        out.append(row)
-    return out
+    return (
+        # Rumpf: senkrechter Balken mit spitzer Nase
+        bar(x, y, CX - 2.0, 3.0, CX + 1.0, 21.0)
+        or in_triangle(x, y, (CX - 2.0, 3.5), (CX + 1.0, 3.5), (CX - 0.5, 0.5))
+        # Tragflaechen: nach hinten gepfeilt
+        or seg(x, y, CX - 0.5, 7.0, 23.5, 16.0, SW)
+        or seg(x, y, CX - 0.5, 7.0, -0.5, 16.0, SW)
+        # Hoehenleitwerk: dasselbe in klein
+        or seg(x, y, CX - 0.5, 17.0, 18.5, 22.5, SW)
+        or seg(x, y, CX - 0.5, 17.0, 5.5, 22.5, SW)
+    )
 
 
 def main():
     dest = sys.argv[1] if len(sys.argv) > 1 else "resources/images"
     os.makedirs(dest, exist_ok=True)
-    grid = solid()
-    line = outline(grid)
-
-    rows = []
-    for y in range(H):
-        r = []
-        for x in range(W):
-            r += [0, 0, 0, 255] if line[y][x] else [0, 0, 0, 0]
-        rows.append(r)
-    png(os.path.join(dest, "system_icon.png"), W, H, rows)
-    # Eine alte ~bw-Fassung waere jetzt identisch und nur noch Ballast.
-    old = os.path.join(dest, "system_icon~bw.png")
-    if os.path.exists(old):
-        os.remove(old)
-        print("system_icon~bw.png entfernt - die Kontur gilt fuer alle Uhren")
-    print("system_icon.png: %dx%d, %d Punkte Linie"
-          % (W, H, sum(1 for r in line for v in r if v)))
+    write(dest, raster(inside))
 
 
 if __name__ == "__main__":
