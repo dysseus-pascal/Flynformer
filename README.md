@@ -320,6 +320,11 @@ Uhr mit jeder Anfrage über `MESSAGE_KEY_LANG`.
 
 ## Bauen
 
+Auf GitHub baut jeder Push auf `main` die pbw neu, checkt sie ein und legt zu
+einer neuen Fassung in `package.json` ein Release an — wie bei den
+Schwesterapps (`.github/workflows/bauen.yml`). Die Notizen kommen aus
+`.github/release/<fassung>.md`.
+
 ```bash
 # Quellen nach WSL spiegeln und bauen
 cp -r src package.json wscript ~/flynformer/
