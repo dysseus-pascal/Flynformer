@@ -5,19 +5,26 @@
 // (Settings -> Display -> Language); die App folgt ihr, es gibt keinen eigenen
 // Sprachschalter. Alle Texte stehen in strings_table.h, eine Zeile je Text.
 //
-// Rueckfall ist ENGLISCH: die Pebble Time 2 kennt acht eingebaute Sprachen,
-// fuer die wir keine Spalte haben (Catala, Espanol, Nederlands, Portugues,
-// Polski und weitere). Eine deutsche Oberflaeche auf einer polnischen Uhr
-// waere schlechter als eine englische.
+// Rueckfall ist ENGLISCH: die Pebble Time 2 kennt eingebaute Sprachen, fuer
+// die wir keine Spalte haben (Catala, Nederlands, Portugues, Polski und
+// weitere). Eine deutsche Oberflaeche auf einer polnischen Uhr waere
+// schlechter als eine englische.
+//
+// Die Reihenfolge der Spalten ist zugleich die Nummer, die als LANG ans
+// Telefon geht. Neue Sprachen kommen deshalb nur HINTEN dazu - sonst spraeche
+// eine alte Telefonseite mit einer neuen Uhr die falsche Sprache.
 
 typedef enum {
   STRINGS_EN = 0,   //< Spalte 0, zugleich der Rueckfall
-  STRINGS_DE,
+  STRINGS_DE,       //< 1
+  STRINGS_FR,       //< 2
+  STRINGS_IT,       //< 3
+  STRINGS_ES,       //< 4
   STRINGS_LANG_COUNT,
 } StringLang;
 
 typedef enum {
-#define STR(id, maxbytes, en, de) id,
+#define STR(id, maxbytes, en, de, fr, it, es) id,
 #include "strings_table.h"
 #undef STR
   STR_COUNT,

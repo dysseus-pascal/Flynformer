@@ -124,15 +124,17 @@ function dump(label) {
   });
 }
 
-// Beide Sprachen: 1 = Deutsch, 0 = Englisch. Die Uhr schickt sie mit.
-const LANG = process.env.FN_LANG === 'en' ? 0 : 1;
+// Die Sprache als LANG-Nummer, wie die Uhr sie mitschickt:
+// 0 en, 1 de (Vorgabe), 2 fr, 3 it, 4 es.
+const LANG_CODES = ['en', 'de', 'fr', 'it', 'es'];
+const LANG = Math.max(0, LANG_CODES.indexOf(process.env.FN_LANG || 'de'));
 sent = [];
 fire('appmessage', { payload: { REFRESH: 1, REQUEST_PAGE: 0, LANG: LANG, CODE: CODE } });
 
 setTimeout(function () {
   for (let p = 0; p < 3; p++) fire('appmessage', { payload: { REQUEST_PAGE: p, LANG: LANG, CODE: CODE } });
   setTimeout(function () {
-    dump(CODE + ', frisch geladen · ' + (LANG ? 'Deutsch' : 'Englisch'));
+    dump(CODE + ', frisch geladen · ' + LANG_CODES[LANG]);
     console.log('\n===== Netzabrufe =====');
     calls.forEach((u) => console.log('  ' + u));
     const paid = calls.filter((u) => u.indexOf('aviationstack') >= 0).length;

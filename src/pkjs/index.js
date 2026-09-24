@@ -17,8 +17,10 @@
 // die Uhr geschickt und steht nicht im Quelltext.
 
 var Clay = require('@rebble/clay');
-var clayConfig = require('./config');
-var clay = new Clay(clayConfig, null, { autoHandleEvents: false });
+var buildConfig = require('./config');
+// Englisch als Startwert; showConfiguration setzt die Seite jedes Mal in der
+// Sprache der Uhr neu (siehe configLang).
+var clay = new Clay(buildConfig(0), null, { autoHandleEvents: false });
 
 var AV_URL = 'https://api.aviationstack.com/v1/flights';
 var ROUTE_URL = 'https://api.adsbdb.com/v0/callsign/';
@@ -34,63 +36,84 @@ var S_QUOTA = 'flynformer_quota';     // { month: '2026-09', used: n }
 // Die Uhr baut fast keinen Text selbst - alles, was auf dem Schirm steht, wird
 // hier zusammengesetzt. Deshalb liegt die Uebersetzung hier und nicht nur in
 // src/c/strings_table.h. Welche Spalte gilt, sagt die Uhr per MESSAGE_KEY_LANG
-// (0 = Englisch und Rueckfall, 1 = Deutsch).
+// (0 = Englisch und Rueckfall, 1 = Deutsch, 2 = Franzoesisch, 3 = Italienisch,
+// 4 = Spanisch - dieselbe Reihenfolge wie StringLang in src/c/strings.h).
+//
+// Jede Zeile auf der Uhr hat hoechstens 22 Zeichen (flint). Die romanischen
+// Spalten sind darum knapp gehalten, nicht woertlich.
 var TXT = {
-  no_flight:  ["no flight",       "kein Flug"],
-  no_data:    ["no data yet",     "keine Daten"],
-  press:      ["press select",    "Mitte drücken"],
-  dep:        ["Dep",             "Abflug"],
-  arr:        ["Arr",             "Ankunft"],
-  sched:      ["sched",           "plan"],
-  revised:    ["new",             "neu"],
-  delay:      ["Delay",           "Verspätung"],
-  ontime:     ["on time",         "pünktlich"],
-  terminal:   ["Terminal",        "Terminal"],
-  gate:       ["Gate",            "Gate"],
-  belt:       ["Belt",            "Band"],
-  unknown:    ["unknown",         "unbekannt"],
-  route:      ["Route",           "Strecke"],
-  flighttime: ["Flight time",     "Flugzeit"],
-  youare:     ["you:",            "du:"],
-  todep:      ["to airport",      "zum Start"],
-  dest:       ["Arrival",         "Ziel"],
-  localtime:  ["local",           "Ortszeit"],
-  nowx:       ["no weather",      "kein Wetter"],
-  inn:        ["in",              "in"],
-  dshort:     ["dep",             "ab"],
-  ashort:     ["arr",             "an"],
-  attime:     ["at",              "um"],
-  remaining:  ["left",            "noch"],
-  cancelled:  ["cancelled",       "storniert"],
-  was:        ["was",             "war"],
-  changed:    ["changed",         "geändert"],
-  newflight:  ["flight added",    "Flug eingetragen"],
-  open_app:   ["Open",            "Öffnen"],
-  min:        ["min",             "min"],
-  hrs:        ["h",               "h"],
-  since:      ["left",            "ab vor"],
-  justnow:    ["just now",        "gerade eben"],
-  ago:        ["",                "vor "],
-  agosuffix:  [" ago",            ""],
-  never:      ["never loaded",    "nie geladen"],
-  nokey:      ["no API key",      "kein API-Schlüssel"],
-  quotaout:   ["quota used up",   "Kontingent erschöpft"],
-  notfound:   ["flight not found","Flug nicht gefunden"],
-  neterr:     ["network error",   "Netzwerkfehler"],
-  timeout:    ["timed out",       "Zeitüberschreitung"],
-  badjson:    ["bad response",    "kaputte Antwort"],
-  apierr:     ["API error",       "API-Fehler"]
+  //           en                  de                    fr                  it                    es
+  no_flight:  ["no flight",       "kein Flug",          "aucun vol",        "nessun volo",        "sin vuelo"],
+  no_data:    ["no data yet",     "keine Daten",        "pas de données",   "nessun dato",        "sin datos"],
+  press:      ["press select",    "Mitte drücken",      "appuyer au centre","premi centrale",     "pulsa centro"],
+  dep:        ["Dep",             "Abflug",             "Départ",           "Partenza",           "Salida"],
+  arr:        ["Arr",             "Ankunft",            "Arrivée",          "Arrivo",             "Llegada"],
+  sched:      ["sched",           "plan",               "prévu",            "previsto",           "previsto"],
+  revised:    ["new",             "neu",                "nouveau",          "nuovo",              "nuevo"],
+  delay:      ["Delay",           "Verspätung",         "Retard",           "Ritardo",            "Retraso"],
+  ontime:     ["on time",         "pünktlich",          "à l'heure",        "in orario",          "a tiempo"],
+  terminal:   ["Terminal",        "Terminal",           "Terminal",         "Terminal",           "Terminal"],
+  gate:       ["Gate",            "Gate",               "Porte",            "Gate",               "Puerta"],
+  belt:       ["Belt",            "Band",               "Tapis",            "Nastro",             "Cinta"],
+  unknown:    ["unknown",         "unbekannt",          "inconnu",          "sconosciuto",        "desconocido"],
+  route:      ["Route",           "Strecke",            "Trajet",           "Rotta",              "Ruta"],
+  flighttime: ["Flight time",     "Flugzeit",           "Durée de vol",     "Durata volo",        "Duración"],
+  youare:     ["you:",            "du:",                "vous :",           "tu:",                "tú:"],
+  todep:      ["to airport",      "zum Start",          "à l'aéroport",     "all'aeroporto",      "al aeropuerto"],
+  dest:       ["Arrival",         "Ziel",               "Arrivée",          "Arrivo",             "Llegada"],
+  localtime:  ["local",           "Ortszeit",           "heure loc.",       "ora locale",         "hora local"],
+  nowx:       ["no weather",      "kein Wetter",        "pas de météo",     "meteo assente",      "sin clima"],
+  inn:        ["in",              "in",                 "dans",             "tra",                "en"],
+  dshort:     ["dep",             "ab",                 "dép",              "part",               "sal"],
+  ashort:     ["arr",             "an",                 "arr",              "arr",                "lle"],
+  attime:     ["at",              "um",                 "à",                "alle",               "a las"],
+  remaining:  ["left",            "noch",               "encore",           "ancora",             "faltan"],
+  cancelled:  ["cancelled",       "storniert",          "annulé",           "cancellato",         "cancelado"],
+  was:        ["was",             "war",                "avant",            "prima",              "antes"],
+  changed:    ["changed",         "geändert",           "modifié",          "modificato",         "modificado"],
+  newflight:  ["flight added",    "Flug eingetragen",   "vol ajouté",       "volo aggiunto",      "vuelo añadido"],
+  open_app:   ["Open",            "Öffnen",             "Ouvrir",           "Apri",               "Abrir"],
+  min:        ["min",             "min",                "min",              "min",                "min"],
+  hrs:        ["h",               "h",                  "h",                "h",                  "h"],
+  since:      ["left",            "ab vor",             "parti il y a",     "partito da",         "salió hace"],
+  justnow:    ["just now",        "gerade eben",        "à l'instant",      "adesso",             "ahora mismo"],
+  // Vor- und Nachsilbe: "vor 5 min", "5 min ago", "il y a 5 min",
+  // "5 min fa", "hace 5 min". Der Fusszeilenpuffer der Uhr fasst 15 Byte.
+  ago:        ["",                "vor ",               "il y a ",          "",                   "hace "],
+  agosuffix:  [" ago",            "",                   "",                 " fa",                ""],
+  never:      ["never loaded",    "nie geladen",        "jamais chargé",    "mai caricato",       "nunca cargado"],
+  nokey:      ["no API key",      "kein API-Schlüssel", "pas de clé API",   "nessuna chiave API", "sin clave API"],
+  quotaout:   ["quota used up",   "Kontingent erschöpft","quota épuisé",    "quota esaurita",     "cuota agotada"],
+  notfound:   ["flight not found","Flug nicht gefunden","vol introuvable",  "volo non trovato",   "vuelo no encontrado"],
+  neterr:     ["network error",   "Netzwerkfehler",     "erreur réseau",    "errore di rete",     "error de red"],
+  timeout:    ["timed out",       "Zeitüberschreitung", "délai dépassé",    "tempo scaduto",      "tiempo agotado"],
+  badjson:    ["bad response",    "kaputte Antwort",    "réponse invalide", "risposta non valida","respuesta inválida"],
+  apierr:     ["API error",       "API-Fehler",         "erreur API",       "errore API",         "error de API"]
 };
 var STATUS_TXT = {
-  scheduled: ["scheduled","geplant"], active: ["en route","unterwegs"],
-  landed: ["landed","gelandet"],      cancelled: ["cancelled","annulliert"],
-  incident: ["incident","Zwischenfall"], diverted: ["diverted","umgeleitet"]
+  scheduled: ["scheduled","geplant","prévu","previsto","programado"],
+  active:    ["en route","unterwegs","en vol","in volo","en vuelo"],
+  landed:    ["landed","gelandet","atterri","atterrato","aterrizado"],
+  cancelled: ["cancelled","annulliert","annulé","cancellato","cancelado"],
+  incident:  ["incident","Zwischenfall","incident","incidente","incidente"],
+  diverted:  ["diverted","umgeleitet","dérouté","dirottato","desviado"]
 };
 var WMO_TXT = [
-  ["clear","klar"], ["partly cloudy","leicht bewölkt"], ["overcast","bedeckt"],
-  ["fog","Nebel"], ["drizzle","Niesel"], ["rain","Regen"], ["snow","Schnee"],
-  ["showers","Schauer"], ["snow showers","Schneeschauer"], ["thunderstorm","Gewitter"]
+  ["clear","klar","dégagé","sereno","despejado"],
+  ["partly cloudy","leicht bewölkt","peu nuageux","poco nuvoloso","poco nuboso"],
+  ["overcast","bedeckt","couvert","coperto","cubierto"],
+  ["fog","Nebel","brouillard","nebbia","niebla"],
+  ["drizzle","Niesel","bruine","pioviggine","llovizna"],
+  ["rain","Regen","pluie","pioggia","lluvia"],
+  ["snow","Schnee","neige","neve","nieve"],
+  ["showers","Schauer","averses","rovesci","chubascos"],
+  ["snow showers","Schneeschauer","averses de neige","rovesci di neve","chubascos de nieve"],
+  ["thunderstorm","Gewitter","orage","temporale","tormenta"]
 ];
+var LANG_COUNT = 5;
+// Die zuletzt von der Uhr gemeldete Sprache. Die Konfigseite oeffnet sich,
+// ohne dass die Uhr etwas schickt - sie soll trotzdem deren Sprache sprechen.
+var S_LANG = 'flynformer_lang';
 
 var s_lang = 0;   // von der Uhr gesetzt, 0 = Englisch
 // Was die letzte Auffrischung an Aenderungen ergab. Wird EINMAL mit der
@@ -807,7 +830,22 @@ function updateGps(code, done) {
 
 // ---------------------------------------------------------------- Ereignisse
 
+// Sprache der Konfigseite: die zuletzt von der Uhr gemeldete. Hat die Uhr
+// sich noch nie gemeldet (App nie geoeffnet), die des Telefons - Englisch,
+// wenn auch die keine der fuenf ist.
+function configLang() {
+  var n = NaN;
+  try { n = parseInt(localStorage.getItem(S_LANG), 10); } catch (e) {}
+  if (n >= 0 && n < LANG_COUNT) return n;
+  var nav = String((typeof navigator !== 'undefined' && navigator.language) || '').slice(0, 2).toLowerCase();
+  var i = ['en', 'de', 'fr', 'it', 'es'].indexOf(nav);
+  return i < 0 ? 0 : i;
+}
+
 Pebble.addEventListener('showConfiguration', function () {
+  // Dieselben Bausteine in jeder Sprache, also reicht es, die Beschreibung
+  // auszutauschen - Clay hat die Komponenten beim Anlegen schon registriert.
+  clay.config = buildConfig(configLang());
   Pebble.openURL(clay.generateUrl());
 });
 
@@ -848,7 +886,13 @@ Pebble.addEventListener('webviewclosed', function (e) {
 Pebble.addEventListener('appmessage', function (e) {
   var p = e.payload, s = settings();
   // Die Uhr sagt, in welcher Sprache sie beschriftet ist.
-  if (p.LANG !== undefined) s_lang = (p.LANG === 1) ? 1 : 0;
+  // Unbekannte Nummern (eine kuenftige Uhr mit mehr Spalten) fallen auf
+  // Englisch zurueck, wie auf der Uhr selbst.
+  if (p.LANG !== undefined) {
+    var n = parseInt(p.LANG, 10);
+    s_lang = (n >= 0 && n < LANG_COUNT) ? n : 0;
+    try { localStorage.setItem(S_LANG, String(s_lang)); } catch (e) {}
+  }
   // Die Flugnummer gehoert der UHR - sie wird dort eingegeben und mit jeder
   // Anfrage mitgeschickt. Die Telefon-App verwaltet sie nicht mehr.
   var code = (p.CODE !== undefined) ? String(p.CODE).toUpperCase() : '';

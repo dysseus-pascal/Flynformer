@@ -9,8 +9,8 @@ nach der Landung das Gepäckband. Wer mehr will, blättert mit Hoch und Runter
 durch vier weitere Seiten.
 
 Orange auf Weiss — hell, nicht düster: man fliegt schliesslich in den Urlaub.
-Die Oberfläche folgt der **Sprache der Uhr** (Deutsch und Englisch, Englisch als
-Rückfall).
+Die Oberfläche folgt der **Sprache der Uhr** (Deutsch, Englisch, Französisch,
+Italienisch und Spanisch, Englisch als Rückfall).
 
 Dass der Grund hell ist, hat einen Grund über den Geschmack hinaus: das
 Pebble-Display **leuchtet nicht, es reflektiert**. Ein heller Grund ist im
@@ -277,7 +277,7 @@ node tools/pkjs_alert_test.js          # Pins, Meldungen, Weckplan
 node tools/pkjs_phase_test.js          # der Statusschirm in allen Flugphasen
 node tools/pkjs_quota_test.js          # was kostet was
 node tools/pkjs_pages_test.js          # alle sechs Seiten, deutsch
-FN_LANG=en node tools/pkjs_pages_test.js   # dasselbe auf englisch
+FN_LANG=en node tools/pkjs_pages_test.js   # dasselbe auf englisch (auch fr, it, es)
 node tools/strings_check.js            # prüft src/c/strings_table.h
 ```
 
@@ -309,14 +309,33 @@ A340-642 D-AIHZ) vom 13.09.2026.
 
 ## Sprachen
 
+Flynformer spricht **Deutsch, Englisch, Französisch, Italienisch und
+Spanisch**. Welche, bestimmt die Uhr (*Settings → Display → Language*); die App
+liest die ersten zwei Buchstaben von `i18n_get_system_locale()`. Jede andere
+Uhrsprache bekommt **Englisch** — eine deutsche Oberfläche auf einer polnischen
+Uhr wäre schlechter als eine englische.
+
 Alle Texte der Uhr stehen in `src/c/strings_table.h`, eine Zeile je Text mit
-den Spalten `en` und `de`. Die Datei wird zweimal eingebunden (X-Makro) — eine
-Zeile mit einer Spalte zu wenig ist deshalb ein Präprozessorfehler.
+den Spalten `en`, `de`, `fr`, `it` und `es`. Die Datei wird zweimal eingebunden
+(X-Makro) — eine Zeile mit einer Spalte zu wenig ist deshalb ein
+Präprozessorfehler. Texte, die in einen festen Puffer kopiert werden, tragen
+dessen Grösse als `maxbytes`; `tools/strings_check.js` prüft sie für jede
+Sprache.
 
 Der Löwenanteil der Oberfläche wird jedoch **auf dem Telefon** gebaut, weil die
 Uhr fertige Kurzzeilen bekommt und nie JSON. Die Übersetzung dieser Texte liegt
 darum in `src/pkjs/index.js` in der Tabelle `TXT`. Welche Spalte gilt, sagt die
-Uhr mit jeder Anfrage über `MESSAGE_KEY_LANG`.
+Uhr mit jeder Anfrage über `MESSAGE_KEY_LANG`: 0 Englisch, 1 Deutsch,
+2 Französisch, 3 Italienisch, 4 Spanisch. Die Nummern sind fest; eine neue
+Sprache käme hinten dazu.
+
+Die **Konfigseite** spricht die Sprache, die die Uhr zuletzt gemeldet hat. Hat
+sie sich noch nie gemeldet, gilt die Sprache des Telefons.
+
+Nicht übersetzt sind Flugnummern, Flughafen-Kürzel und Ortsnamen — sie kommen
+so, wie adsbdb sie liefert —, dazu die Fachwörter *Pin* und *Timeline* und die
+Bezeichnung *AviationStack Access Key*, weil sie so im aviationstack-Konto
+steht.
 
 ## Bauen
 
